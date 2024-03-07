@@ -9,9 +9,8 @@ use std::fs;
 use std::io;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
-use std::path::Path;
 use std::thread;
-use tiny_http::{Header, Request, Response, ResponseBox, Server, StatusCode};
+use tiny_http::{Header, Request, Response, Server, StatusCode};
 
 pub static INDEX: &str = include_str!("template/index.html");
 // pub static STYLE: &[u8] = include_bytes!("template/style.css");
