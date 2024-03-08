@@ -1,9 +1,10 @@
 use clap::Parser;
 use comrak::{markdown_to_html, Options};
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use nanotemplate::template as render;
 use simplelog::{Config, TermLogger};
 use std::env;
+use std::fmt::Write;
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs;
@@ -49,7 +50,7 @@ fn html_response(
 }
 
 fn not_found_response() -> Response<Cursor<Vec<u8>>> {
-    let body = "<h1>404 Not Found</h1>";
+    let body = "<h1>404 Not Found</h1><a href='#' onclick='history.back();'>Go back</a>";
     let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
     return html_response(html, 404);
 }
@@ -110,35 +111,46 @@ fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
 fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
-    let path = cwd.join(request.url().strip_prefix("/").expect("urls start with /"));
+    let relative_path = Path::new(request.url().strip_prefix("/").expect("urls start with /"));
+    let absolute_path = cwd.join(&relative_path);
 
-    let title = path.file_name().and_then(OsStr::to_str).unwrap_or("mdopen");
+    let title = absolute_path.file_name().and_then(OsStr::to_str).unwrap_or("mdopen");
 
-    if !path.exists() {
+    if !absolute_path.exists() {
         info!("not found: {}", request.url());
         return Ok(not_found_response());
     }
 
-    if path.is_dir() {
-        let entries = fs::read_dir(&path)?;
+    if absolute_path.is_dir() {
+        let entries = fs::read_dir(&absolute_path)?;
 
-        let body = entries
-            .filter_map(|entry| entry.ok())
-            .map(|entry| 
-                entry
-                    .path()
-                    .file_name()
-                    .and_then(OsStr::to_str)
-                    .map(|s| s.to_owned())
-                    .unwrap_or("<file>".to_owned())
-            )
-            .fold(String::from("<h1>Directory</h1>"), |a, b| format!("<p>{}</p>", a + &b));
+        let mut listing = String::new();
 
-        let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
+        for entry in entries {
+            let Ok(entry) = entry else { continue; };
+            let file_name = entry.path().file_name().expect("filepath").to_string_lossy().to_string();
+            let href = relative_path.join(&file_name).to_string_lossy().to_string();
+            _ = write!(listing, "<li><a href='{}'>{}</a></li>", href, file_name);
+        }
+
+        let listing = format!("<h1>Directory</h1><ul>{}</ul>", listing);
+        // let listing = entries
+        //     .filter_map(|entry| entry.ok())
+        //     .map(|entry| 
+        //         entry
+        //             .path()
+        //             .file_name()
+        //             .and_then(OsStr::to_str)
+        //             .map(|s| s.to_owned())
+        //             .unwrap_or("<file>".to_owned())
+        //     )
+        //     .fold(String::new(), |a, b| format!("<li><a href='{}'>{}</a></li>", a + &b));
+
+        let html = render(INDEX, &[("title", title), ("body", &listing)]).unwrap();
         return Ok(html_response(html, 200));
     }
 
-    let ext = path.extension().and_then(OsStr::to_str).unwrap_or("");
+    let ext = absolute_path.extension().and_then(OsStr::to_str).unwrap_or("");
 
     if !(ext == "md" || ext == "markdown") {
         let body = format!("<h1>Not a markdown file</h1>");
@@ -146,7 +158,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         return Ok(html_response(html, 404));
     }
 
-    let md = fs::read_to_string(&path)?; 
+    let md = fs::read_to_string(&absolute_path)?; 
 
     let mut md_options = Options::default();
     // allow inline HTML
