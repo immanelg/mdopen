@@ -4,13 +4,16 @@ use log::{debug, error, info, warn};
 use nanotemplate::template;
 use simplelog::{Config, TermLogger};
 use std::env;
+use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fs;
 use std::io;
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
-use std::thread;
 use std::path::Path;
+use std::thread;
+use tiny_http::Method;
 use tiny_http::{Header, Request, Response, Server, StatusCode};
 
 pub static INDEX: &str = include_str!("template/index.html");
@@ -27,29 +30,34 @@ struct Args {
     #[clap(short, long, default_value_t = 5032, help = "port to serve")]
     port: u16,
 
+    // #[clap(short, long, help = "base directory")]
+    // directory: String,
+
     // #[arg(short, long, default_value_t = false)]
     // compile: bool,
 }
 
-fn respond<T: io::Read>(request: Request, response: Response<T>) {
-    if let Err(e) = request.respond(response) {
-        error!("cannot respond: {:?}", e)
-    }
-}
-
-fn respond_html(request: Request, text: impl Into<Vec<u8>>, status: impl Into<StatusCode>) {
-    let response = Response::from_data(text.into())
+fn html_response(
+    text: impl Into<Vec<u8>>,
+    status: impl Into<StatusCode>,
+) -> Response<Cursor<Vec<u8>>> {
+    Response::from_data(text.into())
         .with_header(
             Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf8"[..]).unwrap(),
         )
-        .with_status_code(status);
-    respond(request, response);
+        .with_status_code(status)
 }
 
-fn respond_404_html(request: Request) {
-    let body = "<h1>No such file</h1>";
+fn not_found_response() -> Response<Cursor<Vec<u8>>> {
+    let body = "<h1>404 Not Found</h1>";
     let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
-    respond_html(request, html, 404);
+    return html_response(html, 404);
+}
+
+fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
+    let body = "<h1>500 Internal Server Error</h1>";
+    let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
+    return html_response(html, 500);
 }
 
 fn mime_type(ext: &str) -> &'static str {
@@ -66,70 +74,77 @@ fn mime_type(ext: &str) -> &'static str {
     }
 }
 
-fn handle_request(request: Request) {
-    debug!("{} {}", request.method(), request.url());
+/// If request wants to get a static file (like CSS), constructs response for it (including 404
+/// response). Otherwise returns None.
+fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
 
-    let client_addr = request.remote_addr().expect("tcp listener address");
-    if !client_addr.ip().is_loopback() {
-        warn!(
-            "forbid request to {} from non-localhost address {}",
-            request.url(),
-            client_addr
-        );
-        respond_html(request, "<h1>Forbidden</h1>", 403);
-        return;
-    }
-
-    if let Some(asset_url) = request.url().strip_prefix(STATIC_PREFIX) {
-        let data = match asset_url {
-            "style.css" => STYLE,
-            _ => return respond_404_html(request)
-        };
-
-        let content_type = Path::new(asset_url).extension().and_then(|s| s.to_str()).map_or("", mime_type);
-
-        let response = Response::from_data(data)
-            .with_header(Header::from_bytes(&b"Content-Type"[..], content_type).unwrap())
-            .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
-            .with_status_code(200);
-        respond(request, response);
-        return;
+    let Some(asset_url) = request.url().strip_prefix(STATIC_PREFIX) else {
+        return None;
     };
 
+    let data = match asset_url {
+        "style.css" => STYLE,
+        _ => {
+            warn!("asset not found: {}", &asset_url);
+            return Some(not_found_response());
+        }
+    };
 
-    let cwd = env::current_dir().expect("current dir");
+    let content_type = Path::new(asset_url)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map_or("", mime_type);
+
+    Some(
+        Response::from_data(data)
+            .with_header(Header::from_bytes(&b"Content-Type"[..], content_type).unwrap())
+            .with_header(
+                Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap(),
+            )
+            .with_status_code(200),
+    )
+}
+
+/// Tries to read and compile markdown file and construct a response for it.
+fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
+    let cwd = env::current_dir()?;
+
     let path = cwd.join(request.url().strip_prefix("/").expect("urls start with /"));
 
-    if path.is_dir() {
-        // TODO: list files in dir? 
-        let body = "<h1>Is a directory</h1>";
-        let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
-        respond_html(request, html, 404);
-        return;
-    }
+    let title = path.file_name().and_then(OsStr::to_str).unwrap_or("mdopen");
 
     if !path.exists() {
-        respond_404_html(request);
-        return;
+        return Ok(not_found_response());
     }
 
-    if !path.extension().map(|s| s.to_ascii_lowercase()).map_or(false, |ext| ext == "md" || ext == "markdown") {
-        let body = format!("<h1>Not a markdown file: {:?}</h1>", &path);
-        let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
-        respond_html(request, html, 404);
-        return;
+    if path.is_dir() {
+        let entries = fs::read_dir(&path)?;
+
+        let body = entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| 
+                entry
+                    .path()
+                    .file_name()
+                    .and_then(OsStr::to_str)
+                    .map(|s| s.to_owned())
+                    .unwrap_or("<file>".to_owned())
+            )
+            .fold(String::from("<h1>Directory</h1>"), |a, b| format!("<p>{}</p>", a + &b));
+
+        let html = template(INDEX, &[("title", title), ("body", &body)]).unwrap();
+        return Ok(html_response(html, 200));
     }
 
-    let md = match fs::read_to_string(&path) {
-        Err(e) => {
-            error!("cannot read file: {:?}", e);
-            let body = format!("<h1>Cannot read file: {:?}</h1>", &path);
-            let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
-            respond_html(request, html, 500);
-            return;
-        }
-        Ok(text) => text,
-    };
+    let ext = path.extension().and_then(OsStr::to_str).unwrap_or("");
+
+    if !(ext == "md" || ext == "markdown") {
+        let body = format!("<h1>Not a markdown file</h1>");
+        let html = template(INDEX, &[("title", title), ("body", &body)]).unwrap();
+        return Ok(html_response(html, 404));
+    }
+
+    let md = fs::read_to_string(&path)?; 
 
     let filename = path
         .file_name()
@@ -144,7 +159,48 @@ fn handle_request(request: Request) {
     let body = markdown_to_html(&md, &md_options);
 
     let html = template(INDEX, &[("title", filename), ("body", &body)]).unwrap();
-    respond_html(request, html, 200);
+    return Ok(html_response(html, 200));
+}
+
+// fn ensure_loopback(request: &Request) -> Option<Response<Vec<u8>>> {
+//     let client_addr = request.remote_addr().expect("tcp listener address");
+//     if !client_addr.ip().is_loopback() {
+//         warn!(
+//             "forbid request to {} from non-localhost address {}",
+//             request.url(),
+//             client_addr
+//         );
+//         response_html(request, "<h1>Forbidden</h1>", 403);
+//         return;
+//     }
+
+/// Construct HTML response for request.
+fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
+    let client_addr = request.remote_addr().expect("tcp listener address");
+    if !client_addr.ip().is_loopback() {
+        warn!(
+            "request to {} from non-loopback address {}",
+            request.url(),
+            client_addr
+        );
+        return html_response("<h1>403 Forbidden</h1>", 403);
+    }
+
+    if request.method() != &Method::Get {
+        return html_response("<h1>405 Method Not Allowed</h1>", 405);
+    }
+
+    if let Some(response) = maybe_asset_file(&request) {
+        return response;
+    };
+
+    match serve_file(&request) {
+        Ok(r) => r,
+        Err(err) => {
+            error!("cannot serve file: {}", err);
+            return internal_error_response();
+        }
+    }
 }
 
 fn main() {
@@ -176,6 +232,11 @@ fn main() {
     // debug!("compile? {:?}", args.compile);
 
     for request in server.incoming_requests() {
-        handle_request(request);
+        info!("{} {}", request.method(), request.url());
+        let resp = handle(&request);
+        if let Err(e) = request.respond(resp) {
+            error!("cannot send response: {}", e);
+        };
     }
+    info!("shutting down");
 }
