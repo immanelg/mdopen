@@ -10,12 +10,13 @@ use std::io;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::thread;
+use std::path::Path;
 use tiny_http::{Header, Request, Response, Server, StatusCode};
 
 pub static INDEX: &str = include_str!("template/index.html");
-// pub static STYLE: &[u8] = include_bytes!("template/style.css");
+pub static STYLE: &[u8] = include_bytes!("template/style.css");
 
-// pub static STATIC_PREFIX: &str = "/@/";
+pub static STATIC_PREFIX: &str = "/@/";
 
 #[derive(Parser, Debug)]
 #[command(name = "MDOpen", version = "1.0", about = "quickly preview local markdown files", long_about = None)]
@@ -51,6 +52,20 @@ fn respond_404_html(request: Request) {
     respond_html(request, html, 404);
 }
 
+fn mime_type(ext: &str) -> &'static str {
+    match ext {
+        "js" => "application/javascript",
+        "css" => "text/css",
+        "gif" => "image/gif",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "pdf" => "application/pdf",
+        "html" => "text/html",
+        "txt" => "text/plain",
+        _ => "text/plain",
+    }
+}
+
 fn handle_request(request: Request) {
     debug!("{} {}", request.method(), request.url());
 
@@ -65,32 +80,22 @@ fn handle_request(request: Request) {
         return;
     }
 
-    // if let Some(asset_url) = request.url().strip_prefix(STATIC_PREFIX) {
-    //     let data = match asset_url {
-    //         "style.css" => STYLE,
-    //         _ => return respond_404_html(request)
-    //     };
-    //
-    //     let content_type: &[u8] = match Path::new(asset_url).extension().and_then(|s| s.to_str()) {
-    //         Some("js") => b"application/javascript",
-    //         Some("css") => b"text/css; charset=utf8",
-    //         Some("gif") => b"image/gif",
-    //         Some("png") => b"image/png",
-    //         Some("jpg") | Some("jpeg") => b"image/jpeg",
-    //         Some("pdf") => b"application/pdf",
-    //         Some("html") => b"text/html; charset=utf8",
-    //         Some("txt") => b"text/plain; charset=utf8",
-    //         _ => b"text/plain; charset=utf8"
-    //     };
-    //
-    //     let response = Response::from_data(data)
-    //         .with_header(Header::from_bytes(&b"Content-Type"[..], content_type).unwrap())
-    //         .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
-    //         .with_status_code(200);
-    //     respond(request, response);
-    //     return;
-    // };
-    //
+    if let Some(asset_url) = request.url().strip_prefix(STATIC_PREFIX) {
+        let data = match asset_url {
+            "style.css" => STYLE,
+            _ => return respond_404_html(request)
+        };
+
+        let content_type = Path::new(asset_url).extension().and_then(|s| s.to_str()).map_or("", mime_type);
+
+        let response = Response::from_data(data)
+            .with_header(Header::from_bytes(&b"Content-Type"[..], content_type).unwrap())
+            .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
+            .with_status_code(200);
+        respond(request, response);
+        return;
+    };
+
 
     let cwd = env::current_dir().expect("current dir");
     let path = cwd.join(request.url().strip_prefix("/").expect("urls start with /"));
