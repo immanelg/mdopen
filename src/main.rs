@@ -17,14 +17,14 @@ use tiny_http::Method;
 use tiny_http::{Header, Request, Response, Server, StatusCode};
 
 pub static INDEX: &str = include_str!("template/index.html");
-pub static STYLE: &[u8] = include_bytes!("template/style.css");
+pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
 
 #[derive(Parser, Debug)]
-#[command(name = "MDOpen", version = "1.0", about = "quickly preview local markdown files", long_about = None)]
+#[command(name = "MDOpen", version = "1.0", about = "Quickly preview local markdown files", long_about = None)]
 struct Args {
-    #[clap(num_args = 1.., value_delimiter = ' ', help = "open files in web browser")]
+    #[clap(num_args = 1.., value_delimiter = ' ', help = "Open files in web browser")]
     files: Vec<String>,
 
     #[clap(short, long, default_value_t = 5032, help = "port to serve")]
