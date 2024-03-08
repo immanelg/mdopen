@@ -86,7 +86,7 @@ fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
     let data = match asset_url {
         "style.css" => GITHUB_STYLE,
         _ => {
-            warn!("asset not found: {}", &asset_url);
+            info!("not found: {}", &asset_url);
             return Some(not_found_response());
         }
     };
@@ -115,6 +115,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let title = path.file_name().and_then(OsStr::to_str).unwrap_or("mdopen");
 
     if !path.exists() {
+        info!("not found: {}", request.url());
         return Ok(not_found_response());
     }
 
@@ -182,6 +183,7 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
     }
 
     if request.method() != &Method::Get {
+        info!("method not allowed: {} {}", request.method(), request.url());
         return html_response("<h1>405 Method Not Allowed</h1>", 405);
     }
 
