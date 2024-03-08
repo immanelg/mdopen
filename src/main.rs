@@ -4,9 +4,9 @@ use log::{error, info, warn};
 use nanotemplate::template as render;
 use simplelog::{Config, TermLogger};
 use std::env;
-use std::fmt::Write;
 use std::ffi::OsStr;
 use std::fmt::Debug;
+use std::fmt::Write;
 use std::fs;
 use std::io;
 use std::io::Cursor;
@@ -21,6 +21,8 @@ pub static INDEX: &str = include_str!("template/index.html");
 pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
+
+pub static MD_EXTENSIONS: &[&str] = &["md", "markdown"];
 
 #[derive(Parser, Debug)]
 #[command(name = "MDOpen", version = "1.0", about = "Quickly preview local markdown files", long_about = None)]
@@ -50,7 +52,7 @@ fn html_response(
 }
 
 fn not_found_response() -> Response<Cursor<Vec<u8>>> {
-    let body = "<h1>404 Not Found</h1><a href='#' onclick='history.back();'>Go back</a>";
+    let body = "<h1>404 Not Found</h1>";
     let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
     return html_response(html, 404);
 }
@@ -59,6 +61,10 @@ fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>500 Internal Server Error</h1>";
     let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
     return html_response(html, 500);
+}
+
+fn equals_any(ext: &str, extensions: &[&str]) -> bool {
+    extensions.iter().any(|&e| ext == e)
 }
 
 /// Get content type from extension.
@@ -79,7 +85,6 @@ fn mime_type(ext: &str) -> &'static str {
 /// If request wants to get a static file (like CSS), constructs response for it (including 404
 /// response). Otherwise returns None.
 fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
-
     let Some(asset_url) = request.url().strip_prefix(STATIC_PREFIX) else {
         return None;
     };
@@ -114,7 +119,10 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let relative_path = Path::new(request.url().strip_prefix("/").expect("urls start with /"));
     let absolute_path = cwd.join(&relative_path);
 
-    let title = absolute_path.file_name().and_then(OsStr::to_str).unwrap_or("mdopen");
+    let title = absolute_path
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("mdopen");
 
     if !absolute_path.exists() {
         info!("not found: {}", request.url());
@@ -127,16 +135,36 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         let mut listing = String::new();
 
         for entry in entries {
-            let Ok(entry) = entry else { continue; };
-            let file_name = entry.path().file_name().expect("filepath").to_string_lossy().to_string();
+            let Ok(entry) = entry else {
+                continue;
+            };
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            let file_path = entry.path();
+            if !metadata.is_dir()
+                && !file_path.extension().map_or(false, |ext| {
+                    equals_any(ext.to_string_lossy().as_ref(), MD_EXTENSIONS)
+                })
+            {
+                continue;
+            }
+            let file_name = file_path
+                .file_name()
+                .expect("filepath")
+                .to_string_lossy()
+                .to_string();
             let href = relative_path.join(&file_name).to_string_lossy().to_string();
-            _ = write!(listing, "<li><a href='{}'>{}</a></li>", href, file_name);
+            _ = write!(listing, "<li><a href='{}'>{}</a></li>", &href, &file_name);
         }
 
+        if listing.is_empty() {
+            listing.push_str("Nothing to see here");
+        }
         let listing = format!("<h1>Directory</h1><ul>{}</ul>", listing);
         // let listing = entries
         //     .filter_map(|entry| entry.ok())
-        //     .map(|entry| 
+        //     .map(|entry|
         //         entry
         //             .path()
         //             .file_name()
@@ -150,7 +178,10 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         return Ok(html_response(html, 200));
     }
 
-    let ext = absolute_path.extension().and_then(OsStr::to_str).unwrap_or("");
+    let ext = absolute_path
+        .extension()
+        .and_then(OsStr::to_str)
+        .unwrap_or("");
 
     if !(ext == "md" || ext == "markdown") {
         let body = format!("<h1>Not a markdown file</h1>");
@@ -158,7 +189,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         return Ok(html_response(html, 404));
     }
 
-    let md = fs::read_to_string(&absolute_path)?; 
+    let md = fs::read_to_string(&absolute_path)?;
 
     let mut md_options = Options::default();
     // allow inline HTML
@@ -170,17 +201,6 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     return Ok(html_response(html, 200));
 }
 
-// fn ensure_loopback(request: &Request) -> Option<Response<Vec<u8>>> {
-//     let client_addr = request.remote_addr().expect("tcp listener address");
-//     if !client_addr.ip().is_loopback() {
-//         warn!(
-//             "forbid request to {} from non-localhost address {}",
-//             request.url(),
-//             client_addr
-//         );
-//         response_html(request, "<h1>Forbidden</h1>", 403);
-//         return;
-//     }
 
 /// Construct HTML response for request.
 fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
