@@ -32,7 +32,6 @@ struct Args {
 
     #[clap(short, long, default_value_t = 5032, help = "port to serve")]
     port: u16,
-
     // #[clap(short, long, help = "base directory")]
     // directory: String,
 
@@ -178,12 +177,9 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         return Ok(html_response(html, 200));
     }
 
-    let ext = absolute_path
-        .extension()
-        .and_then(OsStr::to_str)
-        .unwrap_or("");
-
-    if !(ext == "md" || ext == "markdown") {
+    if !relative_path.extension().map_or(false, |ext| {
+        equals_any(ext.to_string_lossy().as_ref(), MD_EXTENSIONS)
+    }) {
         let body = format!("<h1>Not a markdown file</h1>");
         let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
         return Ok(html_response(html, 404));
@@ -200,7 +196,6 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
     return Ok(html_response(html, 200));
 }
-
 
 /// Construct HTML response for request.
 fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
