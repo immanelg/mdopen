@@ -1,7 +1,7 @@
 use clap::Parser;
 use comrak::{markdown_to_html, Options};
 use log::{debug, error, info, warn};
-use nanotemplate::template;
+use nanotemplate::template as render;
 use simplelog::{Config, TermLogger};
 use std::env;
 use std::ffi::OsStr;
@@ -50,16 +50,17 @@ fn html_response(
 
 fn not_found_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>404 Not Found</h1>";
-    let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
+    let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
     return html_response(html, 404);
 }
 
 fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>500 Internal Server Error</h1>";
-    let html = template(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
+    let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
     return html_response(html, 500);
 }
 
+/// Get content type from extension.
 fn mime_type(ext: &str) -> &'static str {
     match ext {
         "js" => "application/javascript",
@@ -83,7 +84,7 @@ fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
     };
 
     let data = match asset_url {
-        "style.css" => STYLE,
+        "style.css" => GITHUB_STYLE,
         _ => {
             warn!("asset not found: {}", &asset_url);
             return Some(not_found_response());
@@ -132,7 +133,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             )
             .fold(String::from("<h1>Directory</h1>"), |a, b| format!("<p>{}</p>", a + &b));
 
-        let html = template(INDEX, &[("title", title), ("body", &body)]).unwrap();
+        let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
         return Ok(html_response(html, 200));
     }
 
@@ -140,17 +141,11 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
 
     if !(ext == "md" || ext == "markdown") {
         let body = format!("<h1>Not a markdown file</h1>");
-        let html = template(INDEX, &[("title", title), ("body", &body)]).unwrap();
+        let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
         return Ok(html_response(html, 404));
     }
 
     let md = fs::read_to_string(&path)?; 
-
-    let filename = path
-        .file_name()
-        .unwrap_or(Default::default())
-        .to_str()
-        .unwrap_or("");
 
     let mut md_options = Options::default();
     // allow inline HTML
@@ -158,7 +153,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
 
     let body = markdown_to_html(&md, &md_options);
 
-    let html = template(INDEX, &[("title", filename), ("body", &body)]).unwrap();
+    let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
     return Ok(html_response(html, 200));
 }
 
@@ -238,5 +233,4 @@ fn main() {
             error!("cannot send response: {}", e);
         };
     }
-    info!("shutting down");
 }
