@@ -47,14 +47,14 @@ fn html_response(
 
 fn not_found_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>404 Not Found</h1>";
-    let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
-    return html_response(html, 404);
+    let html = render(INDEX, [("title", "mdopen"), ("body", &body)]).unwrap();
+    html_response(html, 404)
 }
 
 fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>500 Internal Server Error</h1>";
-    let html = render(INDEX, &[("title", "mdopen"), ("body", &body)]).unwrap();
-    return html_response(html, 500);
+    let html = render(INDEX, [("title", "mdopen"), ("body", &body)]).unwrap();
+    html_response(html, 500)
 }
 
 fn matches_ext(ext: &OsStr, extensions: &[&str]) -> bool {
@@ -81,9 +81,7 @@ fn mime_type(ext: &str) -> &'static str {
 /// If request wants to get a static file (like CSS), constructs response for it (including 404
 /// response). Otherwise returns None.
 fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
-    let Some(asset_url) = request.url().strip_prefix(STATIC_PREFIX) else {
-        return None;
-    };
+    let asset_url = request.url().strip_prefix(STATIC_PREFIX)?;
 
     let data = match asset_url {
         "style.css" => GITHUB_STYLE,
@@ -112,8 +110,8 @@ fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
 fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
-    let relative_path = Path::new(request.url().strip_prefix("/").expect("urls start with /"));
-    let absolute_path = cwd.join(&relative_path);
+    let relative_path = Path::new(request.url().strip_prefix('/').expect("urls start with /"));
+    let absolute_path = cwd.join(relative_path);
 
     let title = absolute_path
         .file_name()
@@ -140,7 +138,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             let entry_abs_path = entry.path();
             if !metadata.is_dir()
                 && !matches_ext(
-                    entry_abs_path.extension().unwrap_or(Default::default()),
+                    entry_abs_path.extension().unwrap_or_default(),
                     MD_EXTENSIONS,
                 )
             {
@@ -162,12 +160,12 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             listing.push_str("Nothing to see here");
         }
         let listing = format!("<h1>Directory</h1><ul>{}</ul>", listing);
-        let html = render(INDEX, &[("title", title), ("body", &listing)]).unwrap();
+        let html = render(INDEX, [("title", title), ("body", &listing)]).unwrap();
         return Ok(html_response(html, 200));
     }
 
     if matches_ext(
-        relative_path.extension().unwrap_or(Default::default()),
+        relative_path.extension().unwrap_or_default(),
         MD_EXTENSIONS,
     ) {
         let md = fs::read_to_string(&absolute_path)?;
@@ -178,7 +176,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
 
         let body = markdown_to_html(&md, &md_options);
 
-        let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
+        let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
         return Ok(html_response(html, 200));
     }
 
@@ -190,10 +188,9 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     //     return Ok(html_response(file, 200));
     // }
 
-    let body = format!("<h1>Bad file!</h1>");
-    let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
-    return Ok(html_response(html, 404));
-
+    let body = "<h1>Bad file!</h1>";
+    let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
+    Ok(html_response(html, 404))
 }
 
 /// Construct HTML response for request.
@@ -213,19 +210,18 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
         return html_response("<h1>405 Method Not Allowed</h1>", 405);
     }
 
-    if let Some(response) = maybe_asset_file(&request) {
+    if let Some(response) = maybe_asset_file(request) {
         return response;
     };
 
-    match serve_file(&request) {
+    match serve_file(request) {
         Ok(r) => r,
         Err(err) => {
             error!("cannot serve file: {}", err);
-            return internal_error_response();
+            internal_error_response()
         }
     }
 }
-
 
 fn main() {
     TermLogger::init(
@@ -238,21 +234,21 @@ fn main() {
 
     let cli = Cli::parse();
 
-
     let port = cli.port;
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
 
-    let server = Server::http(&addr).expect("start server");
+    let server = Server::http(addr).expect("start server");
 
     if !cli.files.is_empty() {
         thread::spawn(move || {
             for file in cli.files.into_iter() {
                 let url = format!("http://127.0.0.1:{}/{}", &port, &file);
-                if let Some(ref browser) = cli.browser {
-                    open::with(&url, browser) 
+                _ = if let Some(ref browser) = cli.browser {
+                    open::with(&url, browser)
                 } else {
                     open::that(&url)
-                }.map_err(|e| error!("cannot open browser: {:?}", e));
+                }
+                .map_err(|e| error!("cannot open browser: {:?}", e));
             }
         });
     }
