@@ -23,7 +23,7 @@ Start the server and open files in the default web browser:
 mdopen README.md TODO.md
 ```
 
-You can access any files in current working directory from `http://localhost:5032/`.
+You can access any files in current working directory from `http://localhost:5032/`. If you access a directory instead of a markdown file, you will see a directory listing.
 
 # TODO
 - Support cool markdown features (syntax highlighting, LaTeX, etc)
