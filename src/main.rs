@@ -1,5 +1,6 @@
 use clap::Parser;
 use comrak::{markdown_to_html, Options};
+use lazy_static::lazy_static;
 use log::{error, info, warn};
 use nanotemplate::template as render;
 use simplelog::{Config, TermLogger};
@@ -8,14 +9,11 @@ use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fmt::Write;
 use std::fs;
-use std::io;
-use std::io::Cursor;
-use std::net::SocketAddr;
-use std::net::{IpAddr, Ipv4Addr};
+use std::io::{self, Cursor};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::thread;
-use tiny_http::Method;
-use tiny_http::{Header, Request, Response, Server, StatusCode};
+use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 pub static INDEX: &str = include_str!("template/index.html");
 pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
@@ -27,14 +25,11 @@ pub static MD_EXTENSIONS: &[&str] = &["md", "markdown"];
 #[derive(Parser, Debug)]
 #[command(name = "MDOpen", version = "1.0", about = "Quickly preview local markdown files", long_about = None)]
 struct Args {
-    #[clap(num_args = 1.., value_delimiter = ' ', help = "Open files in web browser")]
+    #[clap(num_args = 1.., value_delimiter = ' ', help = "Files to open")]
     files: Vec<String>,
 
-    #[clap(short, long, default_value_t = 5032, help = "port to serve")]
+    #[clap(short, long, default_value_t = 5032, help = "Port to serve")]
     port: u16,
-    // #[clap(short, long, help = "base directory")]
-    // directory: String,
-
     // #[arg(short, long, default_value_t = false)]
     // compile: bool,
 }
@@ -62,8 +57,9 @@ fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     return html_response(html, 500);
 }
 
-fn equals_any(ext: &str, extensions: &[&str]) -> bool {
-    extensions.iter().any(|&e| ext == e)
+fn matches(ext: &OsStr, extensions: &[&str]) -> bool {
+    let ext = ext.to_string_lossy().as_ref();
+    extensions.iter().any(|&want| ext == want)
 }
 
 /// Get content type from extension.
@@ -140,46 +136,39 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             let Ok(metadata) = entry.metadata() else {
                 continue;
             };
-            let file_path = entry.path();
+            let entry_abs_path = entry.path();
             if !metadata.is_dir()
-                && !file_path.extension().map_or(false, |ext| {
-                    equals_any(ext.to_string_lossy().as_ref(), MD_EXTENSIONS)
-                })
+                && !matches(
+                    entry_abs_path.extension().unwrap_or(Default::default()),
+                    MD_EXTENSIONS,
+                )
             {
                 continue;
             }
-            let file_name = file_path
+            let entry_name = entry_abs_path
                 .file_name()
                 .expect("filepath")
                 .to_string_lossy()
                 .to_string();
-            let href = relative_path.join(&file_name).to_string_lossy().to_string();
-            _ = write!(listing, "<li><a href='{}'>{}</a></li>", &href, &file_name);
+            let href = relative_path
+                .join(&entry_name)
+                .to_string_lossy()
+                .to_string();
+            _ = write!(listing, "<li><a href='{}'>{}</a></li>", &href, &entry_name);
         }
 
         if listing.is_empty() {
             listing.push_str("Nothing to see here");
         }
         let listing = format!("<h1>Directory</h1><ul>{}</ul>", listing);
-        // let listing = entries
-        //     .filter_map(|entry| entry.ok())
-        //     .map(|entry|
-        //         entry
-        //             .path()
-        //             .file_name()
-        //             .and_then(OsStr::to_str)
-        //             .map(|s| s.to_owned())
-        //             .unwrap_or("<file>".to_owned())
-        //     )
-        //     .fold(String::new(), |a, b| format!("<li><a href='{}'>{}</a></li>", a + &b));
-
         let html = render(INDEX, &[("title", title), ("body", &listing)]).unwrap();
         return Ok(html_response(html, 200));
     }
 
-    if !relative_path.extension().map_or(false, |ext| {
-        equals_any(ext.to_string_lossy().as_ref(), MD_EXTENSIONS)
-    }) {
+    if !(matches(
+        relative_path.extension().unwrap_or(Default::default()),
+        MD_EXTENSIONS,
+    )) {
         let body = format!("<h1>Not a markdown file</h1>");
         let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
         return Ok(html_response(html, 404));
