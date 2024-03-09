@@ -35,7 +35,6 @@ You can also browse current directory if you access `/` or other directory path.
 - LaTeX
 - Syntax highlighting for code blocks
 - Live reloading (use async library like Hyper for WS or SSE)
-- File watcher, live reloading (probably need to use an async HTTP library like Hyper to have websockets / SSE)
 
 ## Ideas
 - Make a simple static website generator from a directory of markdown files
