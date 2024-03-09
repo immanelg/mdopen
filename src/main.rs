@@ -1,6 +1,5 @@
 use clap::Parser;
 use comrak::{markdown_to_html, Options};
-use lazy_static::lazy_static;
 use log::{error, info, warn};
 use nanotemplate::template as render;
 use simplelog::{Config, TermLogger};
@@ -24,7 +23,7 @@ pub static MD_EXTENSIONS: &[&str] = &["md", "markdown"];
 
 #[derive(Parser, Debug)]
 #[command(name = "MDOpen", version = "1.0", about = "Quickly preview local markdown files", long_about = None)]
-struct Args {
+struct Cli {
     #[clap(num_args = 1.., value_delimiter = ' ', help = "Files to open")]
     files: Vec<String>,
 
@@ -33,9 +32,6 @@ struct Args {
 
     #[arg(short, long)]
     browser: Option<String>,
-
-    // #[arg(short, long, default_value_t = false)]
-    // compile: bool,
 }
 
 fn html_response(
@@ -61,8 +57,9 @@ fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     return html_response(html, 500);
 }
 
-fn matches(ext: &OsStr, extensions: &[&str]) -> bool {
-    let ext = ext.to_string_lossy().as_ref();
+fn matches_ext(ext: &OsStr, extensions: &[&str]) -> bool {
+    let ext = ext.to_string_lossy();
+    let ext = ext.as_ref();
     extensions.iter().any(|&want| ext == want)
 }
 
@@ -142,7 +139,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             };
             let entry_abs_path = entry.path();
             if !metadata.is_dir()
-                && !matches(
+                && !matches_ext(
                     entry_abs_path.extension().unwrap_or(Default::default()),
                     MD_EXTENSIONS,
                 )
@@ -169,25 +166,34 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         return Ok(html_response(html, 200));
     }
 
-    if !(matches(
+    if matches_ext(
         relative_path.extension().unwrap_or(Default::default()),
         MD_EXTENSIONS,
-    )) {
-        let body = format!("<h1>Not a markdown file</h1>");
+    ) {
+        let md = fs::read_to_string(&absolute_path)?;
+
+        let mut md_options = Options::default();
+        // allow inline HTML
+        md_options.render.unsafe_ = true;
+
+        let body = markdown_to_html(&md, &md_options);
+
         let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
-        return Ok(html_response(html, 404));
+        return Ok(html_response(html, 200));
     }
 
-    let md = fs::read_to_string(&absolute_path)?;
+    // if matches(
+    //     relative_path.extension().unwrap_or(Default::default()),
+    //     TEXT_EXTENSIONS,
+    // ) {
+    //     let file = fs::read(&absolute_path)?;
+    //     return Ok(html_response(file, 200));
+    // }
 
-    let mut md_options = Options::default();
-    // allow inline HTML
-    md_options.render.unsafe_ = true;
-
-    let body = markdown_to_html(&md, &md_options);
-
+    let body = format!("<h1>Bad file!</h1>");
     let html = render(INDEX, &[("title", title), ("body", &body)]).unwrap();
-    return Ok(html_response(html, 200));
+    return Ok(html_response(html, 404));
+
 }
 
 /// Construct HTML response for request.
@@ -220,6 +226,7 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
     }
 }
 
+
 fn main() {
     TermLogger::init(
         simplelog::LevelFilter::Debug,
@@ -229,26 +236,26 @@ fn main() {
     )
     .unwrap();
 
-    let args = Args::parse();
+    let cli = Cli::parse();
 
-    let port = args.port;
+
+    let port = cli.port;
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
 
     let server = Server::http(&addr).expect("start server");
 
-    if !args.files.is_empty() {
+    if !cli.files.is_empty() {
         thread::spawn(move || {
-            for file in args.files.into_iter() {
+            for file in cli.files.into_iter() {
                 let url = format!("http://127.0.0.1:{}/{}", &port, &file);
-                if let Some(browser) = args.browser {
-                    open::with(&url, &browser) 
+                if let Some(ref browser) = cli.browser {
+                    open::with(&url, browser) 
                 } else {
                     open::that(&url)
                 }.map_err(|e| error!("cannot open browser: {:?}", e));
             }
         });
     }
-    // debug!("compile? {:?}", args.compile);
 
     for request in server.incoming_requests() {
         info!("{} {}", request.method(), request.url());
