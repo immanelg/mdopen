@@ -1,5 +1,7 @@
 # mdopen
-Quickly preview local markdown files in browser with GitHub-like look. Written in Rust.
+Quickly preview local markdown files in browser with GitHub-like look. 
+
+Doesn't use GitHub API, but just compiles markdown to HTML in Rust.
 
 # Installation
 
@@ -17,16 +19,28 @@ This will install `mdopen` binary to `~/.cargo/bin`.
 
 # Usage
 
-Start the server and open files in the default web browser:
+Start the server and open files in Firefox:
 
 ```sh
-mdopen README.md TODO.md
+mdopen README.md TODO.md -b firefox
 ```
 
-You can access any files in current working directory from `http://localhost:5032/`. If you access a directory instead of a markdown file, you will see a directory listing.
+This will open files on addresses `http://localhost:5032/README.md` and `http://localhost:5032/TODO.md`.
+
+You access any markdown files relative to the current working directory.
+
+You can also browse current directory if you access `/` or other directory path.
 
 # TODO
-- Support cool markdown features (syntax highlighting, LaTeX, etc)
-- Make this a static website / documentation generator
+- LaTeX
+- Syntax highlighting for code blocks
+- Live reloading (use async library like Hyper for WS or SSE)
 - File watcher, live reloading (probably need to use an async HTTP library like Hyper to have websockets / SSE)
 
+## Ideas
+- Make a simple static website generator from a directory of markdown files
+- Make a neovim plugin for previewing markdown files like markdown-preview.nvim
+- Make something like a file browser
+
+# Acknowledgements
+[grip](https://github.com/joeyespo/grip) is similar.
