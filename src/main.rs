@@ -30,6 +30,10 @@ struct Args {
 
     #[clap(short, long, default_value_t = 5032, help = "Port to serve")]
     port: u16,
+
+    #[arg(short, long)]
+    browser: Option<String>,
+
     // #[arg(short, long, default_value_t = false)]
     // compile: bool,
 }
@@ -235,10 +239,12 @@ fn main() {
     if !args.files.is_empty() {
         thread::spawn(move || {
             for file in args.files.into_iter() {
-                let url = format!("http://localhost:{}/{}", &port, &file);
-                if let Err(e) = webbrowser::open(&url) {
-                    error!("cannot open browser: {:?}", e);
-                }
+                let url = format!("http://127.0.0.1:{}/{}", &port, &file);
+                if let Some(browser) = args.browser {
+                    open::with(&url, &browser) 
+                } else {
+                    open::that(&url)
+                }.map_err(|e| error!("cannot open browser: {:?}", e));
             }
         });
     }
