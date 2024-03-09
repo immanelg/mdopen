@@ -173,6 +173,11 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         let mut md_options = Options::default();
         // allow inline HTML
         md_options.render.unsafe_ = true;
+        md_options.extension.strikethrough = true;
+        md_options.extension.table = true;
+        md_options.extension.autolink = true;
+        // md_options.extension.front_matter_delimiter = true;
+        md_options.extension.tasklist = true;
 
         let body = markdown_to_html(&md, &md_options);
 
