@@ -5,9 +5,13 @@ Doesn't use GitHub API, but just compiles markdown to HTML in Rust.
 
 # Installation
 
-## From source
+Install from crates.io:
 
-Build with `cargo`:
+```sh
+cargo install mdopen
+```
+
+Or build from the repository:
 
 ```sh
 git clone https://github.com/immanelg/mdopen --depth=1
