@@ -27,7 +27,7 @@ struct Cli {
     #[clap(short, long, default_value_t = 5032, help = "Port to serve")]
     port: u16,
 
-    #[arg(short, long)]
+    #[arg(short, long, help = "Browser to use for opening files")]
     browser: Option<String>,
 }
 
