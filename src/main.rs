@@ -227,6 +227,13 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
     }
 }
 
+fn open_browser(browser: &Option<String>, url: &String) -> io::Result<()> {
+    match browser {
+        Some(ref browser) => open::with(&url, browser),
+        None => open::that(&url),
+    }
+}
+
 fn main() {
     env_logger::init();
 
@@ -241,12 +248,9 @@ fn main() {
         thread::spawn(move || {
             for file in cli.files.into_iter() {
                 let url = format!("http://127.0.0.1:{}/{}", &port, &file);
-                _ = if let Some(ref browser) = cli.browser {
-                    open::with(&url, browser)
-                } else {
-                    open::that(&url)
+                if let Err(e) = open_browser(&cli.browser, &url) {
+                    error!("cannot open browser: {:?}", e);
                 }
-                .map_err(|e| error!("cannot open browser: {:?}", e));
             }
         });
     }
