@@ -18,8 +18,6 @@ pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
 
-pub static MD_EXTENSIONS: &[&str] = &["md", "markdown"];
-
 #[derive(Parser, Debug)]
 #[command(name = "MDOpen", version = "1.0", about = "Quickly preview local markdown files", long_about = None)]
 struct Cli {
@@ -56,30 +54,8 @@ fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     html_response(html, 500)
 }
 
-fn matches_ext(ext: &OsStr, extensions: &[&str]) -> bool {
-    let ext = ext.to_string_lossy();
-    let ext = ext.as_ref();
-    extensions.iter().any(|&want| ext == want)
-}
-
-/// Get content type from extension.
-fn mime_type(ext: &str) -> &'static str {
-    match ext {
-        "js" => "application/javascript",
-        "css" => "text/css",
-        "gif" => "image/gif",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "pdf" => "application/pdf",
-        "html" => "text/html",
-        "txt" => "text/plain",
-        _ => "text/plain",
-    }
-}
-
-/// If request wants to get a static file (like CSS), constructs response for it (including 404
-/// response). Otherwise returns None.
-fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
+/// Returns response for static content request
+fn try_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
     let asset_url = request.url().strip_prefix(STATIC_PREFIX)?;
 
     let data = match asset_url {
@@ -89,23 +65,28 @@ fn maybe_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
             return Some(not_found_response());
         }
     };
+    let resp = Response::from_data(data)
+        .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
+        .with_status_code(200);
 
-    let content_type = Path::new(asset_url)
-        .extension()
-        .and_then(|s| s.to_str())
-        .map_or("", mime_type);
-
-    Some(
-        Response::from_data(data)
-            .with_header(Header::from_bytes(&b"Content-Type"[..], content_type).unwrap())
-            .with_header(
-                Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap(),
-            )
-            .with_status_code(200),
-    )
+    Some(resp)
 }
 
-/// Tries to read and compile markdown file and construct a response for it.
+/// Get content type from extension.
+fn mime_type(ext: &str) -> Option<&'static str> {
+    match ext {
+        "js" => Some("application/javascript"),
+        "css" => Some("text/css"),
+        "gif" => Some("image/gif"),
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "pdf" => Some("application/pdf"),
+        "html" => Some("text/html"),
+        "txt" => Some("text/plain"),
+        _ => None,
+    }
+}
+
 fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
@@ -131,18 +112,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             let Ok(entry) = entry else {
                 continue;
             };
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
             let entry_abs_path = entry.path();
-            if !metadata.is_dir()
-                && !matches_ext(
-                    entry_abs_path.extension().unwrap_or_default(),
-                    MD_EXTENSIONS,
-                )
-            {
-                continue;
-            }
             let entry_name = entry_abs_path
                 .file_name()
                 .expect("filepath")
@@ -163,38 +133,46 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
         return Ok(html_response(html, 200));
     }
 
-    if matches_ext(
-        relative_path.extension().unwrap_or_default(),
-        MD_EXTENSIONS,
-    ) {
-        let md = fs::read_to_string(&absolute_path)?;
+    let ext = relative_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
 
-        let mut md_options = Options::default();
-        // allow inline HTML
-        md_options.render.unsafe_ = true;
-        md_options.extension.strikethrough = true;
-        md_options.extension.table = true;
-        md_options.extension.autolink = true;
-        // md_options.extension.front_matter_delimiter = true;
-        md_options.extension.tasklist = true;
+    let mut mime = mime_type(ext);
 
-        let body = markdown_to_html(&md, &md_options);
+    let data = fs::read(&absolute_path)?;
 
-        let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
-        return Ok(html_response(html, 200));
-    }
+    let data = match ext {
+        "md" | "markdown" => {
+            mime = Some("text/html");
 
-    // if matches(
-    //     relative_path.extension().unwrap_or(Default::default()),
-    //     TEXT_EXTENSIONS,
-    // ) {
-    //     let file = fs::read(&absolute_path)?;
-    //     return Ok(html_response(file, 200));
-    // }
+            let md = String::from_utf8_lossy(&data).to_string();
 
-    let body = "<h1>Bad file!</h1>";
-    let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
-    Ok(html_response(html, 404))
+            let mut md_options = Options::default();
+            // allow inline HTML
+            md_options.render.unsafe_ = true;
+            md_options.extension.strikethrough = true;
+            md_options.extension.table = true;
+            md_options.extension.autolink = true;
+            // md_options.extension.front_matter_delimiter = true;
+            md_options.extension.tasklist = true;
+
+            let body = markdown_to_html(&md, &md_options);
+
+            let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
+            html.into()
+        }
+        _ => data,
+    };
+
+    let resp = Response::from_data(data).with_status_code(200);
+    let resp = if let Some(mime) = mime {
+        resp.with_header(Header::from_bytes(&b"Content-Type"[..], mime).unwrap())
+    } else {
+        resp
+    };
+
+    Ok(resp)
 }
 
 /// Construct HTML response for request.
@@ -214,7 +192,7 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
         return html_response("<h1>405 Method Not Allowed</h1>", 405);
     }
 
-    if let Some(response) = maybe_asset_file(request) {
+    if let Some(response) = try_asset_file(request) {
         return response;
     };
 
