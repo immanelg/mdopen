@@ -122,7 +122,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
                 .join(&entry_name)
                 .to_string_lossy()
                 .to_string();
-            _ = write!(listing, "<li><a href='{}'>{}</a></li>", &href, &entry_name);
+            _ = write!(listing, "<li><a href='/{}'>{}</a></li>", &href, &entry_name);
         }
 
         if listing.is_empty() {
