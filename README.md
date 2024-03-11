@@ -11,15 +11,11 @@ Install from crates.io:
 cargo install mdopen
 ```
 
-Or build from the repository:
+Or build from the main branch:
 
 ```sh
-git clone https://github.com/immanelg/mdopen --depth=1
-cd mdopen
-cargo install --path .
+cargo install --git https://github.com/immanelg/mdopen.git
 ```
-
-This will install `mdopen` binary to `~/.cargo/bin`.
 
 # Usage
 
