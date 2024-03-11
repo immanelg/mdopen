@@ -4,8 +4,7 @@ use log::{error, info, warn};
 use nanotemplate::template as render;
 use std::env;
 use std::ffi::OsStr;
-use std::fmt::Debug;
-use std::fmt::Write;
+use std::fmt::{Debug, Write};
 use std::fs;
 use std::io::{self, Cursor};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -44,13 +43,13 @@ fn html_response(
 
 fn not_found_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>404 Not Found</h1>";
-    let html = render(INDEX, [("title", "mdopen"), ("body", &body)]).unwrap();
+    let html = render(INDEX, [("title", "mdopen"), ("body", body)]).unwrap();
     html_response(html, 404)
 }
 
 fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>500 Internal Server Error</h1>";
-    let html = render(INDEX, [("title", "mdopen"), ("body", &body)]).unwrap();
+    let html = render(INDEX, [("title", "mdopen"), ("body", body)]).unwrap();
     html_response(html, 500)
 }
 
@@ -205,10 +204,10 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
     }
 }
 
-fn open_browser(browser: &Option<String>, url: &String) -> io::Result<()> {
+fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
     match browser {
-        Some(ref browser) => open::with(&url, browser),
-        None => open::that(&url),
+        Some(ref browser) => open::with(url, browser),
+        None => open::that(url),
     }
 }
 
