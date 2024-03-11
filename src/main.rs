@@ -2,7 +2,6 @@ use clap::Parser;
 use comrak::{markdown_to_html, Options};
 use log::{error, info, warn};
 use nanotemplate::template as render;
-use simplelog::{Config, TermLogger};
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::Debug;
@@ -229,13 +228,7 @@ fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
 }
 
 fn main() {
-    TermLogger::init(
-        simplelog::LevelFilter::Debug,
-        Config::default(),
-        simplelog::TerminalMode::Mixed,
-        simplelog::ColorChoice::Auto,
-    )
-    .unwrap();
+    env_logger::init();
 
     let cli = Cli::parse();
 
