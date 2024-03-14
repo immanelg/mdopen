@@ -45,10 +45,5 @@ You can also browse current directory if you access `/` or other directory path.
 - Syntax highlighting for code blocks
 - Live reloading (use async library like Hyper for WS or SSE)
 
-## Ideas
-- Make a simple static website generator from a directory of markdown files
-- Make a neovim plugin for previewing markdown files like markdown-preview.nvim
-- Make something like a file browser
-
 # Acknowledgements
 [grip](https://github.com/joeyespo/grip) is similar.
