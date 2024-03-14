@@ -10,13 +10,13 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.1", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 comrak = "0.21.0"
 tiny_http = "0.12.0"
 log = "0.4.21"
 nanotemplate = "0.3.0"
-anyhow = "1.0.80"
-open = "5.1.2"
+anyhow = "1"
+open = "5"
 env_logger = "0.11.3"
 
 [profile.release]
