@@ -1,23 +1,23 @@
 [package]
 name = "mdopen"
-version = "0.3.0"
 edition = "2021"
+version = "0.3.0"
 description = "Preview markdown files in a browser"
-repository = "https://github.com/immanelg/mdopen"
 keywords = ["markdown"]
 license = "BSD-3-Clause"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/immanelg/mdopen"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-comrak = "0.21.0"
-tiny_http = "0.12.0"
+comrak = { version = "0.21.0", default-features = false }
+env_logger = "0.11.3"
 log = "0.4.21"
 nanotemplate = "0.3.0"
-anyhow = "1"
 open = "5"
-env_logger = "0.11.3"
+tiny_http = "0.12.0"
+
+[dependencies.clap]
+version = "4"
+features = ["derive"]
 
 [profile.release]
 strip = true
