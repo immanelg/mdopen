@@ -1,5 +1,4 @@
 use clap::Parser;
-use comrak::{markdown_to_html, Options};
 use log::{error, info, warn};
 use nanotemplate::template as render;
 use std::env;
@@ -147,16 +146,25 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
 
             let md = String::from_utf8_lossy(&data).to_string();
 
-            let mut md_options = Options::default();
-            // allow inline HTML
-            md_options.render.unsafe_ = true;
-            md_options.extension.strikethrough = true;
-            md_options.extension.table = true;
-            md_options.extension.autolink = true;
-            // md_options.extension.front_matter_delimiter = true;
-            md_options.extension.tasklist = true;
-
-            let body = markdown_to_html(&md, &md_options);
+            let body = markdown::to_html_with_options(
+                &md,
+                &markdown::Options {
+                    compile: markdown::CompileOptions {
+                        allow_dangerous_html: true,
+                        allow_dangerous_protocol: true,
+                        ..markdown::CompileOptions::gfm()
+                    },
+                    parse: markdown::ParseOptions { 
+                        constructs: markdown::Constructs {
+                            math_flow: true,
+                            math_text: true,
+                            ..markdown::Constructs::gfm()
+                        },
+                        ..markdown::ParseOptions::gfm()
+                    },
+                    ..markdown::Options::gfm()
+                }
+            ).unwrap();
 
             let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
             html.into()

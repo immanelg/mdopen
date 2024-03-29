@@ -29,20 +29,21 @@
 	}
 	</style>
 
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
-	<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
-	<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
-	<script>
-		document.addEventListener("DOMContentLoaded", function() {
-			renderMathInElement(document.body, {
-				delimiters: [
-					{left: '$$', right: '$$', display: true},
-					{left: '$', right: '$', display: false},
-					{left: '\\(', right: '\\)', display: false},
-					{left: '\\[', right: '\\]', display: true}
-				],
-				throwOnError: true
-			});
-		});
+	<!-- syntax highlighting -->
+	<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+	<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" rel="stylesheet">
+	<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github.min.css" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)" rel="stylesheet">
+	<script>hljs.highlightAll();</script>
+
+	<!-- math -->
+	<script nomodule defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.js" integrity="sha384-IolEJdmwZJpJkyCvXBnmGt8wXcP3nvRjxBjPv7/PWW7oODJhZ+qiY1sDpwgjcKLT" crossorigin="anonymous"></script>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.css" integrity="sha384-K1E1xaIzoWihlXfiT5fcmLNabsnrl+dqc0errnRwtMX14tKRA9cCYNDGnXiHEZMs" crossorigin="anonymous">
+	<script type="module" type="text/javascript">
+		import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.mjs';
+		const nodes = Array.from(document.body.querySelectorAll('code.language-math'))
+		for (const node of nodes) {
+			katex.render(node.textContent, node, { throwOnError: false })
+		}
 	</script>
+
 </html>

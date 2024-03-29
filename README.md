@@ -20,8 +20,7 @@ Install from crates.io:
 cargo install mdopen
 ```
 
-Or build from the main branch:
-
+or directly from this repo:
 ```sh
 cargo install --git https://github.com/immanelg/mdopen.git
 ```
@@ -40,10 +39,18 @@ You access any markdown files relative to the current working directory.
 
 You can also browse current directory if you access `/` or other directory path.
 
-# TODO
-- LaTeX
-- Syntax highlighting for code blocks
-- Live reloading (use async library like Hyper for WS or SSE)
+# Features
+- [x] Compile GitHub-flavoured markdown to HTML 
+- [x] Steal GitHub CSS, automatic dark/light mode
+- [x] Open files in the default browser automatically
+- [x] Directory listing / serve any files in the filesystem
+- [x] Syntax Highlighting (via highlight.js)
+- [x] Render LaTeX (via KaTeX)
+- [ ] Output to standalone HTML files 
+- [ ] Live reloading via WS/SSE (tiny_http -> hyper)
+
+Feedback and pull requests are welcome.
 
 # Acknowledgements
 [grip](https://github.com/joeyespo/grip) is similar.
+
