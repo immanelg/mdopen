@@ -19,10 +19,10 @@ pub static STATIC_PREFIX: &str = "/@/";
 #[derive(Parser, Debug)]
 #[command(name = "MDOpen", version = "0.4.0", about = "Quickly preview local markdown files", long_about = None)]
 struct Cli {
-    #[clap(num_args = 1.., value_delimiter = ' ', help = "Files to open")]
+    #[arg(num_args = 0.., help = "Files to open")]
     files: Vec<String>,
 
-    #[clap(short, long, default_value_t = 5032, help = "Port to serve")]
+    #[arg(short, long, default_value_t = 5032, help = "Port to serve")]
     port: u16,
 
     #[arg(short, long, help = "Browser to use for opening files")]
