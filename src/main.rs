@@ -1,6 +1,7 @@
 use clap::Parser;
 use log::{error, info, warn};
 use nanotemplate::template as render;
+use percent_encoding::percent_decode;
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::{Debug, Write};
@@ -88,7 +89,8 @@ fn mime_type(ext: &str) -> Option<&'static str> {
 fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
-    let relative_path = Path::new(request.url().strip_prefix('/').expect("urls start with /"));
+    let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
+    let relative_path = Path::new(url.strip_prefix('/').expect("urls start with /"));
     let absolute_path = cwd.join(relative_path);
 
     let title = absolute_path
