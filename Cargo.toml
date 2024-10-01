@@ -10,10 +10,10 @@ repository = "https://github.com/immanelg/mdopen"
 [dependencies]
 env_logger = "0.11.3"
 log = "0.4.21"
-markdown = "1.0.0-alpha.16"
 nanotemplate = "0.3.0"
 open = "5"
 percent-encoding = "2"
+pulldown-cmark = "0.12.1"
 tiny_http = "0.12.0"
 
 [dependencies.clap]

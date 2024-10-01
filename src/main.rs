@@ -1,7 +1,8 @@
 use clap::Parser;
-use log::{error, info, warn};
+use log::{error, info};
 use nanotemplate::template as render;
 use percent_encoding::percent_decode;
+use pulldown_cmark::{CowStr, Event, Tag, TagEnd};
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::{Debug, Write};
@@ -86,6 +87,56 @@ fn mime_type(ext: &str) -> Option<&'static str> {
     }
 }
 
+fn to_tag_anchor(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-')
+        .map(|c| if c == ' ' { '-' } else { c })
+        .collect()
+}
+
+fn to_html(md: &str) -> String {
+    use pulldown_cmark::{Options, Parser};
+
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_SMART_PUNCTUATION);
+    options.insert(Options::ENABLE_MATH);
+    options.insert(Options::ENABLE_GFM);
+
+    let parser = Parser::new_ext(md, options);
+
+    let mut inside_heading_level = None;
+
+    let parser = parser.map(|event| match event {
+        Event::Start(Tag::Heading { level, id, classes, attrs }) => {
+            inside_heading_level = Some(level);
+            Event::Start(Tag::Heading { level, id, classes, attrs })
+        }
+        Event::End(TagEnd::Heading(level)) => {
+            inside_heading_level = None;
+            Event::End(TagEnd::Heading(level))
+        }
+        Event::Text(text) => {
+            if inside_heading_level.is_some() {
+                let anchor = to_tag_anchor(&text);
+                Event::Html(CowStr::from(format!(r##"<a id="{anchor}" class="anchor" href="#{anchor}"><svg class="octicon octicon-link" viewBox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"></path></svg></a>{text}"##)))
+            } else {
+                Event::Text(text)
+            }
+        }
+        _ => event,
+    });
+
+    let mut html_output = String::new();
+    pulldown_cmark::html::push_html(&mut html_output, parser);
+
+    return html_output;
+}
 fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
@@ -148,25 +199,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
 
             let md = String::from_utf8_lossy(&data).to_string();
 
-            let body = markdown::to_html_with_options(
-                &md,
-                &markdown::Options {
-                    compile: markdown::CompileOptions {
-                        allow_dangerous_html: true,
-                        allow_dangerous_protocol: true,
-                        ..markdown::CompileOptions::gfm()
-                    },
-                    parse: markdown::ParseOptions { 
-                        constructs: markdown::Constructs {
-                            math_flow: true,
-                            math_text: true,
-                            ..markdown::Constructs::gfm()
-                        },
-                        ..markdown::ParseOptions::gfm()
-                    },
-                    ..markdown::Options::gfm()
-                }
-            ).unwrap();
+            let body = to_html(&md);
 
             let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
             html.into()
