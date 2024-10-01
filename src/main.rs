@@ -234,7 +234,7 @@ fn main() {
     if !cli.files.is_empty() {
         thread::spawn(move || {
             for file in cli.files.into_iter() {
-                let url = format!("http://127.0.0.1:{}/{}", &port, &file);
+                let url = format!("http://localhost:{}/{}", &port, &file);
                 if let Err(e) = open_browser(&cli.browser, &url) {
                     error!("cannot open browser: {:?}", e);
                 }
