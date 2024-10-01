@@ -186,16 +186,6 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
 
 /// Construct HTML response for request.
 fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
-    let client_addr = request.remote_addr().expect("tcp listener address");
-    if !client_addr.ip().is_loopback() {
-        warn!(
-            "request to {} from non-loopback address {}",
-            request.url(),
-            client_addr
-        );
-        return html_response("<h1>403 Forbidden</h1>", 403);
-    }
-
     if request.method() != &Method::Get {
         info!("method not allowed: {} {}", request.method(), request.url());
         return html_response("<h1>405 Method Not Allowed</h1>", 405);
