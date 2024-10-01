@@ -18,7 +18,7 @@ pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 pub static STATIC_PREFIX: &str = "/@/";
 
 #[derive(Parser, Debug)]
-#[command(name = "MDOpen", version = "0.4.0", about = "Quickly preview local markdown files", long_about = None)]
+#[command(name = "MDOpen", version = env!("CARGO_PKG_VERSION"), about = "Quickly preview local markdown files", long_about = None)]
 struct Cli {
     #[arg(num_args = 0.., help = "Files to open")]
     files: Vec<String>,
