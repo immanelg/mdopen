@@ -107,6 +107,7 @@ fn to_html(md: &str) -> String {
     options.insert(Options::ENABLE_SMART_PUNCTUATION);
     options.insert(Options::ENABLE_MATH);
     options.insert(Options::ENABLE_GFM);
+    options.insert(Options::ENABLE_MATH);
 
     let parser = Parser::new_ext(md, options);
 

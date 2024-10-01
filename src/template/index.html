@@ -40,7 +40,7 @@
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.css" integrity="sha384-K1E1xaIzoWihlXfiT5fcmLNabsnrl+dqc0errnRwtMX14tKRA9cCYNDGnXiHEZMs" crossorigin="anonymous">
 	<script type="module" type="text/javascript">
 		import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.mjs';
-		const nodes = Array.from(document.body.querySelectorAll('code.language-math'))
+		const nodes = Array.from(document.body.querySelectorAll('.math'))
 		for (const node of nodes) {
 			katex.render(node.textContent, node, { throwOnError: false })
 		}
