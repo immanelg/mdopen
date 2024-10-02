@@ -166,7 +166,7 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
     let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
-    let relative_path = Path::new(url.strip_prefix('/').expect("urls start with /"));
+    let relative_path = Path::new(url.as_ref()).strip_prefix("/").expect("url should have / prefix");
     let absolute_path = cwd.join(relative_path);
 
     let title = absolute_path
