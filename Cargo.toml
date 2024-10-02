@@ -13,7 +13,7 @@ log = "0.4.21"
 nanotemplate = "0.3.0"
 open = "5"
 percent-encoding = "2"
-pulldown-cmark = "0.12.1"
+pulldown-cmark = { version = "0.12.1", default-features = false, features = ["html"] }
 tiny_http = "0.12.0"
 
 [dependencies.clap]
