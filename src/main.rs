@@ -209,7 +209,7 @@ fn main() {
                 let url = format!("http://localhost:{}/{}", &port, &file);
                 info!("opening {}", &url);
                 if let Err(e) = open_browser(&args.browser, &url) {
-                    error!("cannot open browser: {:?}", e);
+                    error!("cannot open browser: {}", e);
                 }
             }
         });
