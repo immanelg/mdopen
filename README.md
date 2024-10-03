@@ -10,7 +10,11 @@
 
 Quickly preview local markdown files in browser with GitHub-like look. 
 
-Doesn't use GitHub API, but just compiles markdown to HTML in Rust.
+Doesn't use GitHub API, but locally compiles markdown to HTML in Rust and renders it in a browser. 
+
+Supports most of the GitHub markdown features, including syntax highlighting and math formulas.
+
+Has GitHub-like CSS including automatic dark/light colorschemes.
 
 # Installation
 
@@ -27,29 +31,11 @@ cargo install --git https://github.com/immanelg/mdopen.git
 
 # Usage
 
-Start the server and open files in Firefox:
+Start the server and `README.md` in your favourite browser:
 
 ```sh
-mdopen README.md TODO.md -b firefox
+mdopen README.md --browser firefox 
 ```
-
-This will open files on addresses `http://localhost:5032/README.md` and `http://localhost:5032/TODO.md`.
-
-You access any markdown files relative to the current working directory.
-
-You can also browse current directory if you access `/` or other directory path.
-
-# Features
-- [x] Compile GitHub-flavoured markdown to HTML 
-- [x] Steal GitHub CSS, automatic dark/light mode
-- [x] Open files in the default browser automatically
-- [x] Directory listing / serve any files in the filesystem
-- [x] Syntax Highlighting (via highlight.js)
-- [x] Render LaTeX (via KaTeX)
-- [ ] Output to standalone HTML files 
-- [ ] Live reloading via WS/SSE (tiny_http -> hyper)
-
-Feedback and pull requests are welcome.
 
 # Acknowledgements
 [grip](https://github.com/joeyespo/grip) is similar.
