@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::{error, info};
+use log::{debug, error, info};
 use nanotemplate::template as render;
 use percent_encoding::percent_decode;
 use pulldown_cmark::{BlockQuoteKind, CowStr, Event, Tag, TagEnd};
@@ -166,7 +166,9 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
     let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
-    let relative_path = Path::new(url.as_ref()).strip_prefix("/").expect("url should have / prefix");
+    let relative_path = Path::new(url.as_ref())
+        .strip_prefix("/")
+        .expect("url should have / prefix");
     let absolute_path = cwd.join(relative_path);
 
     let title = absolute_path
@@ -270,19 +272,28 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
 }
 
 fn main() {
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let cli = Cli::parse();
 
     let port = cli.port;
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
 
-    let server = Server::http(addr).expect("start server");
+    let server = match Server::http(addr) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("cannot start server: {}", e);
+            return;
+        }
+    };
+
+    info!("serving at http://{}", addr);
 
     if !cli.files.is_empty() {
         thread::spawn(move || {
             for file in cli.files.into_iter() {
                 let url = format!("http://localhost:{}/{}", &port, &file);
+                info!("opening {}", &url);
                 if let Err(e) = open_browser(&cli.browser, &url) {
                     error!("cannot open browser: {:?}", e);
                 }
@@ -291,7 +302,7 @@ fn main() {
     }
 
     for request in server.incoming_requests() {
-        info!("{} {}", request.method(), request.url());
+        debug!("{} {}", request.method(), request.url());
         let resp = handle(&request);
         if let Err(e) = request.respond(resp) {
             error!("cannot send response: {}", e);
