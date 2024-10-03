@@ -1,10 +1,9 @@
-use clap::Parser;
 use log::{debug, error, info};
 use nanotemplate::template as render;
 use percent_encoding::percent_decode;
 use std::env;
 use std::ffi::OsStr;
-use std::fmt::{Debug, Write};
+use std::fmt::Write;
 use std::fs;
 use std::io::{self, Cursor};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -13,24 +12,13 @@ use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 mod markdown;
+mod cli;
 
 pub static INDEX: &str = include_str!("template/index.html");
 pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
 
-#[derive(Parser, Debug)]
-#[command(name = "MDOpen", version = env!("CARGO_PKG_VERSION"), about = "Quickly preview local markdown files", long_about = None)]
-struct Cli {
-    #[arg(num_args = 0.., help = "Files to open")]
-    files: Vec<String>,
-
-    #[arg(short, long, default_value_t = 5032, help = "Port to serve")]
-    port: u16,
-
-    #[arg(short, long, help = "Browser to use for opening files")]
-    browser: Option<String>,
-}
 
 fn html_response(
     text: impl Into<Vec<u8>>,
@@ -200,9 +188,9 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let cli = Cli::parse();
+    let args = cli::Args::parse();
 
-    let port = cli.port;
+    let port = args.port;
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
 
     let server = match Server::http(addr) {
@@ -215,12 +203,12 @@ fn main() {
 
     info!("serving at http://{}", addr);
 
-    if !cli.files.is_empty() {
+    if !args.files.is_empty() {
         thread::spawn(move || {
-            for file in cli.files.into_iter() {
+            for file in args.files.into_iter() {
                 let url = format!("http://localhost:{}/{}", &port, &file);
                 info!("opening {}", &url);
-                if let Err(e) = open_browser(&cli.browser, &url) {
+                if let Err(e) = open_browser(&args.browser, &url) {
                     error!("cannot open browser: {:?}", e);
                 }
             }
