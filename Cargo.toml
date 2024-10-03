@@ -8,7 +8,7 @@ license = "BSD-3-Clause"
 repository = "https://github.com/immanelg/mdopen"
 
 [dependencies]
-env_logger = "0.11.3"
+env_logger = { version = "0.11.3", default-features = false, features = ["humantime"] }
 lexopt = "0.3.0"
 log = "0.4.21"
 nanotemplate = "0.3.0"
