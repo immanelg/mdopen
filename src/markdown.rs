@@ -8,16 +8,6 @@ fn to_tag_anchor(name: &str) -> String {
         .collect()
 }
 
-fn blockquote_kind_to_css_class(kind: BlockQuoteKind) -> &'static str {
-    match kind {
-        BlockQuoteKind::Tip => "tip",
-        BlockQuoteKind::Note => "note",
-        BlockQuoteKind::Warning => "warning",
-        BlockQuoteKind::Caution => "caution",
-        BlockQuoteKind::Important => "important",
-    }
-}
-
 pub fn to_html(md: &str) -> String {
     use pulldown_cmark::{Options, Parser};
 
@@ -55,18 +45,6 @@ pub fn to_html(md: &str) -> String {
                 Event::Text(text)
             }
         }
-        Event::Start(Tag::BlockQuote(kind)) => {
-            match kind {
-                Some(kind) => {
-                    let cls = blockquote_kind_to_css_class(kind);
-                    Event::Html(CowStr::from(format!(r#"<blockquote class="markdown-alert-{cls}">"#)))
-                }
-               None => Event::Html(CowStr::from(format!(r#"<blockquote>"#)))
-            }
-        },
-        Event::End(TagEnd::BlockQuote(_kind)) => {
-            Event::Html(CowStr::from(r#"</blockquote>"#))
-        },
         _ => event,
     });
 
