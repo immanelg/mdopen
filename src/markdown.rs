@@ -1,4 +1,4 @@
-use pulldown_cmark::{BlockQuoteKind, CowStr, Event, Tag, TagEnd, html::push_html};
+use pulldown_cmark::{html::push_html, CowStr, Event, Tag, TagEnd};
 
 fn to_tag_anchor(name: &str) -> String {
     name.to_lowercase()

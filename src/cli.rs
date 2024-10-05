@@ -1,7 +1,11 @@
-use lexopt::{Arg::{Long, Short, Value}, ValueExt};
+use lexopt::{
+    Arg::{Long, Short, Value},
+    ValueExt,
+};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const USAGE: &'static str = "usage: mdopen [-h|--help] [-v|--version] [-b|--browser BROWSER] [-p|--port PORT] [FILES...]";
+const USAGE: &'static str =
+    "usage: mdopen [-h|--help] [-v|--version] [-b|--browser BROWSER] [-p|--port PORT] [FILES...]";
 
 #[derive(Debug)]
 pub struct Args {
@@ -23,7 +27,6 @@ impl Args {
 }
 
 fn parse_args() -> Result<Args, lexopt::Error> {
-
     let mut port = 5032;
     let mut browser = Option::<String>::None;
     let mut files = Vec::<String>::new();
@@ -59,4 +62,3 @@ fn parse_args() -> Result<Args, lexopt::Error> {
         port,
     })
 }
-

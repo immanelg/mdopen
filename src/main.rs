@@ -11,14 +11,13 @@ use std::path::Path;
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
-mod markdown;
 mod cli;
+mod markdown;
 
 pub static INDEX: &str = include_str!("template/index.html");
 pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
-
 
 fn html_response(
     text: impl Into<Vec<u8>>,
