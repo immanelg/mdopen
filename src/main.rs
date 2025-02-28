@@ -212,7 +212,12 @@ fn convert_websocket_key(input: &str) -> String {
     })
 }
 
-fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> Option<Request> {
+enum AcceptWebsocketResult {
+    Continue(Request),
+    Accepted,
+}
+
+fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptWebsocketResult {
     match request
         .headers()
         .iter()
@@ -226,7 +231,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> Option<
         }) {
         None => {
             // Not websocket
-            return Some(request);
+            return AcceptWebsocketResult::Continue(request);
         }
         _ => (),
     };
@@ -240,7 +245,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> Option<
         None => {
             let response = tiny_http::Response::from_data(&[]).with_status_code(400);
             let _ = request.respond(response);
-            return None;
+            return AcceptWebsocketResult::Accepted;
         }
         Some(k) => k,
     };
@@ -279,7 +284,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> Option<
             }
         }
     });
-    None
+    AcceptWebsocketResult::Accepted
 }
 
 /// Route a request and respond to it.
@@ -296,8 +301,8 @@ fn handle(request: Request, server_addr: &SocketAddr, reader: Reader) {
     };
 
     let request = match accept_websocket_or_continue(request, reader) {
-        Some(request) => request,
-        None => return,
+        AcceptWebsocketResult::Accepted => return,
+        AcceptWebsocketResult::Continue(request) => request,
     };
 
     match serve_file(&request, server_addr) {
