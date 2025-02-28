@@ -1,49 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta http-equiv="X-UA-Compatible" content="ie=edge">
-		<title>{title}</title>
-		<link rel="stylesheet" href="/@/style.css">
-	</head>
-	<body>
-		<div class="markdown-body">
-			{body}
-			<!-- <p><a href='#' onclick='history.back();'>Go back</a></p> -->
-			<p><a href='/'>Home</a></p>
-		</div>
-	</body>
-	<style>
-	@media (prefers-color-scheme: dark) {
-		body {
-			background-color: #0d1117;
-		}
-	}
-	.markdown-body {
-		box-sizing: border-box;
-		min-width: 200px;
-		max-width: 980px;
-		margin: 0 auto;
-		padding: 45px;
-	}
-	</style>
 
-	<!-- syntax highlighting -->
-	<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-	<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" rel="stylesheet">
-	<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github.min.css" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)" rel="stylesheet">
-	<script>hljs.highlightAll();</script>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>{title}</title>
+  <link rel="stylesheet" href="/@/style.css">
+</head>
 
-	<!-- math -->
-	<script nomodule defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.js" integrity="sha384-IolEJdmwZJpJkyCvXBnmGt8wXcP3nvRjxBjPv7/PWW7oODJhZ+qiY1sDpwgjcKLT" crossorigin="anonymous"></script>
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.css" integrity="sha384-K1E1xaIzoWihlXfiT5fcmLNabsnrl+dqc0errnRwtMX14tKRA9cCYNDGnXiHEZMs" crossorigin="anonymous">
-	<script type="module" type="text/javascript">
-		import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.mjs';
-		const nodes = Array.from(document.body.querySelectorAll('.math'))
-		for (const node of nodes) {
-			katex.render(node.textContent, node, { throwOnError: false })
-		}
-	</script>
+<body>
+  <div class="markdown-body">
+    {body}
+    <!-- <p><a href='#' onclick='history.back();'>Go back</a></p> -->
+    <p><a href='/'>Home</a></p>
+  </div>
+</body>
+<style>
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-color: #0d1117;
+    }
+  }
+
+  .markdown-body {
+    box-sizing: border-box;
+    min-width: 200px;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 45px;
+  }
+</style>
+
+<!-- syntax highlighting -->
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github-dark.min.css"
+  media="(prefers-color-scheme: dark)" rel="stylesheet">
+<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github.min.css"
+  media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)" rel="stylesheet">
+<script>hljs.highlightAll();</script>
+
+<!-- math -->
+<script nomodule defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.js"
+  integrity="sha384-IolEJdmwZJpJkyCvXBnmGt8wXcP3nvRjxBjPv7/PWW7oODJhZ+qiY1sDpwgjcKLT" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.css"
+  integrity="sha384-K1E1xaIzoWihlXfiT5fcmLNabsnrl+dqc0errnRwtMX14tKRA9cCYNDGnXiHEZMs" crossorigin="anonymous">
+<script type="module" type="text/javascript">
+  import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.mjs';
+  const nodes = Array.from(document.body.querySelectorAll('.math'))
+  for (const node of nodes) {
+    katex.render(node.textContent, node, {throwOnError: false})
+  }
+</script>
+
+<!-- hot reload-->
+<script>
+  function main() {
+    const wsUrl = {ws_url};
+    console.log("provided wsUrl:", wsUrl);
+    if (!wsUrl) {
+      console.log("skip ws connection");
+      return;
+    }
+    console.log("connecting to ws");
+    const socket = new WebSocket(wsUrl, "ping");
+    socket.addEventListener("message", (event) => {
+      console.log("Message from server ", event.data);
+      location.reload();
+    });
+  }
+
+  main();
+</script>
 
 </html>

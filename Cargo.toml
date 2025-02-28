@@ -8,14 +8,22 @@ license = "BSD-3-Clause"
 repository = "https://github.com/immanelg/mdopen"
 
 [dependencies]
-env_logger = { version = "0.11.3", default-features = false, features = ["humantime"] }
+env_logger = { version = "0.11.3", default-features = false, features = [
+    "humantime",
+] }
 lexopt = "0.3.0"
 log = "0.4.21"
 nanotemplate = "0.3.0"
 open = "5"
 percent-encoding = "2"
-pulldown-cmark = { version = "0.12.1", default-features = false, features = ["html"] }
+pulldown-cmark = { version = "0.12.1", default-features = false, features = [
+    "html",
+] }
 tiny_http = "0.12.0"
+sha1 = "0.10.6"
+base64 = "0.22.1"
+notify = "8.0.0"
+bus = "2.4.1"
 
 [profile.release]
 strip = true
