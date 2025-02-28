@@ -1,15 +1,16 @@
 use log::{debug, error, info};
 use nanotemplate::template as render;
+use notify::Watcher;
 use percent_encoding::percent_decode;
 use rustc_serialize::base64::{Config, Newline, Standard, ToBase64};
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::fs;
-use std::io::Read;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
@@ -34,13 +35,21 @@ fn html_response(
 
 fn not_found_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>404 Not Found</h1>";
-    let html = render(INDEX, [("title", "mdopen"), ("body", body)]).unwrap();
+    let html = render(
+        INDEX,
+        [("title", "mdopen"), ("body", body), ("ws_url", "null")],
+    )
+    .unwrap();
     html_response(html, 404)
 }
 
 fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>500 Internal Server Error</h1>";
-    let html = render(INDEX, [("title", "mdopen"), ("body", body)]).unwrap();
+    let html = render(
+        INDEX,
+        [("title", "mdopen"), ("body", body), ("ws_url", "null")],
+    )
+    .unwrap();
     html_response(html, 500)
 }
 
@@ -77,8 +86,13 @@ fn mime_type(ext: &str) -> Option<&'static str> {
     }
 }
 
-fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
+fn serve_file(
+    request: &Request,
+    server_addr: &SocketAddr,
+) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
+
+    let websocket_url = format!("\"ws://{}:{}\"", server_addr.ip(), server_addr.port());
 
     let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
     let relative_path = Path::new(url.as_ref())
@@ -122,7 +136,15 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             listing.push_str("Nothing to see here");
         }
         let listing = format!("<h1>Directory</h1><ul>{}</ul>", listing);
-        let html = render(INDEX, [("title", title), ("body", &listing)]).unwrap();
+        let html = render(
+            INDEX,
+            [
+                ("title", title),
+                ("body", &listing),
+                ("ws_url", &websocket_url),
+            ],
+        )
+        .unwrap();
         return Ok(html_response(html, 200));
     }
 
@@ -142,7 +164,15 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             let md = String::from_utf8_lossy(&data).to_string();
             let body = markdown::to_html(&md);
 
-            let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
+            let html = render(
+                INDEX,
+                [
+                    ("title", title),
+                    ("body", &body),
+                    ("ws_url", &websocket_url),
+                ],
+            )
+            .unwrap();
             html.into()
         }
         _ => data,
@@ -172,7 +202,7 @@ fn convert_websocket_key(input: &str) -> String {
     })
 }
 
-fn accept_websocket_or_continue(request: Request) -> Option<Request> {
+fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> Option<Request> {
     match request
         .headers()
         .iter()
@@ -224,30 +254,26 @@ fn accept_websocket_or_continue(request: Request) -> Option<Request> {
         );
 
     let mut stream = request.upgrade("websocket", response);
-
-    thread::spawn(move || {
-        loop {
-            let mut out = Vec::new();
-            match Read::by_ref(&mut stream).take(1).read_to_end(&mut out) {
-                Ok(n) if n >= 1 => {
-                    // "Hello" frame
-                    let data = [0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
-                    stream.write(&data).ok();
-                    stream.flush().ok();
-                }
-                Ok(_) => panic!("eof ; should never happen"),
-                Err(e) => {
-                    println!("closing connection because: {}", e);
-                    return;
-                }
-            };
+    info!("connected to websocket");
+    thread::spawn(move || loop {
+        let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        match reader.recv() {
+            Ok(event) => {
+                debug!("event: {:?}", event);
+                assert!(hello_frame.len() > 0);
+                stream.write_all(hello_frame).ok();
+                stream.flush().ok();
+            }
+            Err(err) => {
+                eprintln!("failed to recv event from bus: {}", err);
+            }
         }
     });
     None
 }
 
 /// Route a request and respond to it.
-fn handle(request: Request) {
+fn handle(request: Request, server_addr: &SocketAddr, reader: Reader) {
     if request.method() != &Method::Get {
         info!("method not allowed: {} {}", request.method(), request.url());
         let _ = request.respond(html_response("<h1>405 Method Not Allowed</h1>", 405));
@@ -259,12 +285,12 @@ fn handle(request: Request) {
         return;
     };
 
-    let request = match accept_websocket_or_continue(request) {
+    let request = match accept_websocket_or_continue(request, reader) {
         Some(request) => request,
         None => return,
     };
 
-    match serve_file(&request) {
+    match serve_file(&request, server_addr) {
         Ok(r) => {
             let _ = request.respond(r);
         }
@@ -280,6 +306,14 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
         Some(ref browser) => open::with(url, browser),
         None => open::that(url),
     }
+}
+
+type Event = notify::Event;
+type Reader = bus::BusReader<Event>;
+
+fn broadcaster<T>(len: usize) -> Arc<Mutex<bus::Bus<T>>> {
+    let bus = bus::Bus::new(len);
+    Arc::new(Mutex::new(bus))
 }
 
 fn main() {
@@ -301,6 +335,28 @@ fn main() {
 
     info!("serving at http://{}", addr);
 
+    let bus = broadcaster(100);
+    let incoming_bus = bus.clone();
+
+    let mut watcher = notify::RecommendedWatcher::new(
+        move |result: Result<notify::Event, notify::Error>| {
+            if let Ok(event) = result {
+                let mut bus = bus.lock().unwrap();
+                debug!("broadcasting event: {:?}", event);
+                bus.try_broadcast(event).unwrap();
+            }
+        },
+        notify::Config::default(),
+    )
+    .unwrap();
+
+    for file in args.files.iter() {
+        let path = Path::new(file);
+        watcher
+            .watch(&path, notify::RecursiveMode::Recursive)
+            .unwrap();
+    }
+
     if !args.files.is_empty() {
         thread::spawn(move || {
             for file in args.files.into_iter() {
@@ -315,6 +371,10 @@ fn main() {
 
     for request in server.incoming_requests() {
         debug!("{} {}", request.method(), request.url());
-        handle(request);
+        let reader = {
+            let mut bus = incoming_bus.lock().unwrap();
+            bus.add_rx()
+        };
+        handle(request, &addr, reader);
     }
 }

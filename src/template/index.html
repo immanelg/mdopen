@@ -46,4 +46,23 @@
 		}
 	</script>
 
+    <!-- hot reload-->
+    <script>
+        function main() {
+            const wsUrl = {ws_url};
+            console.log("provided ws_url:", wsUrl);
+            if (!wsUrl) {
+                console.log("skip ws connection");
+                return;
+            }
+            console.log("connecting to ws");
+            const socket = new WebSocket(wsUrl, "ping");
+            socket.addEventListener("message", (event) => {
+                console.log("Message from server ", event.data);
+                location.reload();
+            });
+        }
+
+        main();
+    </script>
 </html>
