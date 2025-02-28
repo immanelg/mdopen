@@ -1,10 +1,12 @@
 use log::{debug, error, info};
 use nanotemplate::template as render;
 use percent_encoding::percent_decode;
+use rustc_serialize::base64::{Config, Newline, Standard, ToBase64};
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::fs;
+use std::io::Read;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::Path;
@@ -138,7 +140,6 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
             mime = Some("text/html");
 
             let md = String::from_utf8_lossy(&data).to_string();
-
             let body = markdown::to_html(&md);
 
             let html = render(INDEX, [("title", title), ("body", &body)]).unwrap();
@@ -157,22 +158,119 @@ fn serve_file(request: &Request) -> io::Result<Response<Cursor<Vec<u8>>>> {
     Ok(resp)
 }
 
-/// Construct HTML response for request.
-fn handle(request: &Request) -> Response<Cursor<Vec<u8>>> {
-    if request.method() != &Method::Get {
-        info!("method not allowed: {} {}", request.method(), request.url());
-        return html_response("<h1>405 Method Not Allowed</h1>", 405);
-    }
+/// Turns a Sec-WebSocket-Key into a Sec-WebSocket-Accept.
+fn convert_websocket_key(input: &str) -> String {
+    use sha1::{Digest, Sha1};
+    const MAGIC_STRING: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-    if let Some(response) = try_asset_file(request) {
-        return response;
+    let input = format!("{}{}", input, MAGIC_STRING);
+    <Sha1 as Digest>::digest(input).to_base64(Config {
+        char_set: Standard,
+        pad: true,
+        line_length: None,
+        newline: Newline::LF,
+    })
+}
+
+fn accept_websocket_or_continue(request: Request) -> Option<Request> {
+    match request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv(&"Upgrade"))
+        .and_then(|hdr| {
+            if hdr.value == "websocket" {
+                Some(hdr)
+            } else {
+                None
+            }
+        }) {
+        None => {
+            // Not websocket
+            return Some(request);
+        }
+        _ => (),
     };
 
-    match serve_file(request) {
-        Ok(r) => r,
+    let key = match request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv(&"Sec-WebSocket-Key"))
+        .map(|h| h.value.clone())
+    {
+        None => {
+            let response = tiny_http::Response::from_data(&[]).with_status_code(400);
+            let _ = request.respond(response);
+            return None;
+        }
+        Some(k) => k,
+    };
+
+    // building the "101 Switching Protocols" response
+    let response = tiny_http::Response::new_empty(tiny_http::StatusCode(101))
+        .with_header("Upgrade: websocket".parse::<tiny_http::Header>().unwrap())
+        .with_header("Connection: Upgrade".parse::<tiny_http::Header>().unwrap())
+        .with_header(
+            "Sec-WebSocket-Protocol: ping"
+                .parse::<tiny_http::Header>()
+                .unwrap(),
+        )
+        .with_header(
+            format!(
+                "Sec-WebSocket-Accept: {}",
+                convert_websocket_key(key.as_str())
+            )
+            .parse::<tiny_http::Header>()
+            .unwrap(),
+        );
+
+    let mut stream = request.upgrade("websocket", response);
+
+    thread::spawn(move || {
+        loop {
+            let mut out = Vec::new();
+            match Read::by_ref(&mut stream).take(1).read_to_end(&mut out) {
+                Ok(n) if n >= 1 => {
+                    // "Hello" frame
+                    let data = [0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
+                    stream.write(&data).ok();
+                    stream.flush().ok();
+                }
+                Ok(_) => panic!("eof ; should never happen"),
+                Err(e) => {
+                    println!("closing connection because: {}", e);
+                    return;
+                }
+            };
+        }
+    });
+    None
+}
+
+/// Route a request and respond to it.
+fn handle(request: Request) {
+    if request.method() != &Method::Get {
+        info!("method not allowed: {} {}", request.method(), request.url());
+        let _ = request.respond(html_response("<h1>405 Method Not Allowed</h1>", 405));
+        return;
+    }
+
+    if let Some(response) = try_asset_file(&request) {
+        let _ = request.respond(response);
+        return;
+    };
+
+    let request = match accept_websocket_or_continue(request) {
+        Some(request) => request,
+        None => return,
+    };
+
+    match serve_file(&request) {
+        Ok(r) => {
+            let _ = request.respond(r);
+        }
         Err(err) => {
             error!("cannot serve file: {}", err);
-            internal_error_response()
+            let _ = request.respond(internal_error_response());
         }
     }
 }
@@ -217,9 +315,6 @@ fn main() {
 
     for request in server.incoming_requests() {
         debug!("{} {}", request.method(), request.url());
-        let resp = handle(&request);
-        if let Err(e) = request.respond(resp) {
-            error!("cannot send response: {}", e);
-        };
+        handle(request);
     }
 }
