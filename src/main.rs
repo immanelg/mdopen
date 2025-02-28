@@ -6,7 +6,7 @@ use std::ffi::OsStr;
 use std::fmt::Write;
 use std::fs;
 use std::io::{self, Cursor};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::Path;
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
@@ -189,8 +189,9 @@ fn main() {
 
     let args = cli::Args::parse();
 
+    let host = args.host;
     let port = args.port;
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
+    let addr = SocketAddr::new(host, port);
 
     let server = match Server::http(addr) {
         Ok(s) => s,
@@ -205,7 +206,7 @@ fn main() {
     if !args.files.is_empty() {
         thread::spawn(move || {
             for file in args.files.into_iter() {
-                let url = format!("http://localhost:{}/{}", &port, &file);
+                let url = format!("http://{}:{}/{}", &host, &port, &file);
                 info!("opening {}", &url);
                 if let Err(e) = open_browser(&args.browser, &url) {
                     error!("cannot open browser: {}", e);
