@@ -5,8 +5,8 @@ use lexopt::{
     ValueExt,
 };
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const USAGE: &'static str =
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const USAGE: &str =
     "usage: mdopen [-h|--help] [-v|--version] [-b|--browser BROWSER] [-p|--port PORT] [--host HOST] [FILES...]";
 
 #[derive(Debug)]

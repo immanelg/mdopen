@@ -214,32 +214,29 @@ enum AcceptWebsocketResult {
 }
 
 fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptWebsocketResult {
-    match request
+    if request
         .headers()
         .iter()
-        .find(|h| h.field.equiv(&"Upgrade"))
+        .find(|h| h.field.equiv("Upgrade"))
         .and_then(|hdr| {
             if hdr.value == "websocket" {
                 Some(hdr)
             } else {
                 None
             }
-        }) {
-        None => {
-            // Not websocket
-            return AcceptWebsocketResult::Continue(request);
-        }
-        _ => (),
+        }).is_none() {
+        // Not websocket
+        return AcceptWebsocketResult::Continue(request);
     };
 
     let key = match request
         .headers()
         .iter()
-        .find(|h| h.field.equiv(&"Sec-WebSocket-Key"))
+        .find(|h| h.field.equiv("Sec-WebSocket-Key"))
         .map(|h| h.value.clone())
     {
         None => {
-            let response = tiny_http::Response::from_data(&[]).with_status_code(400);
+            let response = tiny_http::Response::from_data([]).with_status_code(400);
             let _ = request.respond(response);
             return AcceptWebsocketResult::Accepted;
         }
@@ -273,7 +270,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
                 notify::EventKind::Access(_) => {}
                 _ => {
                     debug!("modification event: {:?}", event);
-                    assert!(hello_frame.len() > 0);
+                    assert!(!hello_frame.is_empty());
                     stream.write_all(hello_frame).unwrap();
                     stream.flush().unwrap();
                     return;
@@ -368,7 +365,7 @@ fn main() {
     for file in args.files.iter() {
         let path = Path::new(file);
         watcher
-            .watch(&path, notify::RecursiveMode::Recursive)
+            .watch(path, notify::RecursiveMode::Recursive)
             .unwrap();
     }
 
