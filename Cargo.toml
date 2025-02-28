@@ -20,7 +20,6 @@ pulldown-cmark = { version = "0.12.1", default-features = false, features = [
     "html",
 ] }
 tiny_http = "0.12.0"
-rustc-serialize = "0.3"
 sha1 = "0.10.6"
 base64 = "0.22.1"
 notify = "8.0.0"

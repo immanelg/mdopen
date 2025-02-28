@@ -2,7 +2,6 @@ use log::{debug, error, info};
 use nanotemplate::template as render;
 use notify::Watcher;
 use percent_encoding::percent_decode;
-use rustc_serialize::base64::{Config, Newline, Standard, ToBase64};
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::Write;
@@ -200,16 +199,13 @@ fn serve_file(
 
 /// Turns a Sec-WebSocket-Key into a Sec-WebSocket-Accept.
 fn convert_websocket_key(input: &str) -> String {
+    use base64::Engine as _;
     use sha1::{Digest, Sha1};
     const MAGIC_STRING: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
     let input = format!("{}{}", input, MAGIC_STRING);
-    <Sha1 as Digest>::digest(input).to_base64(Config {
-        char_set: Standard,
-        pad: true,
-        line_length: None,
-        newline: Newline::LF,
-    })
+    let output = <Sha1 as Digest>::digest(input);
+    base64::engine::general_purpose::STANDARD.encode(output.as_slice())
 }
 
 enum AcceptWebsocketResult {

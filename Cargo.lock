@@ -273,7 +273,6 @@ dependencies = [
  "open",
  "percent-encoding",
  "pulldown-cmark",
- "rustc-serialize",
  "sha1",
  "tiny_http",
 ]
@@ -405,12 +404,6 @@ checksum = "82b568323e98e49e2a0899dcee453dd679fae22d69adf9b11dd508d1549b7e2f"
 dependencies = [
  "bitflags 2.8.0",
 ]
-
-[[package]]
-name = "rustc-serialize"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe834bc780604f4674073badbad26d7219cadfb4a2275802db12cbae17498401"
 
 [[package]]
 name = "same-file"
