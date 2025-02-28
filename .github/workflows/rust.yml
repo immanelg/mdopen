@@ -20,7 +20,11 @@ jobs:
       run: cargo build --verbose
     - name: Run
       run: |
-        ./target/debug/mdopen -- README.md > mdopen.log 2>mdopen_error.log &
+        RUST_LOG=debug ./target/debug/mdopen -- README.md > mdopen.log 2>mdopen_error.log &
         sleep 3
     - name: Test
       run: HOST=127.0.0.1 PORT=5032 cargo test
+    - name: Logs
+      run:
+        cat mdopen.log
+        cat mdopen_error.log
