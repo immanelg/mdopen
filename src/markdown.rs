@@ -51,5 +51,5 @@ pub fn to_html(md: &str) -> String {
     let mut html_output = String::new();
     push_html(&mut html_output, parser);
 
-    return html_output;
+    html_output
 }
