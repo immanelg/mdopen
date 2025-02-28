@@ -25,7 +25,7 @@ jobs:
         RUST_LOG=debug ./target/debug/mdopen -- README.md > mdopen.log 2>mdopen_error.log &
         sleep 3
     - name: Test
-      run: HOST=127.0.0.1 PORT=5032 cargo test
+      run: HOST="127.0.0.1" PORT=5032 cargo test
     - name: Logs
       run: |
         echo mdopen.log
