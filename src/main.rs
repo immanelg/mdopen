@@ -274,6 +274,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
                 assert!(hello_frame.len() > 0);
                 stream.write_all(hello_frame).unwrap();
                 stream.flush().unwrap();
+                return;
             }
             Err(err) => {
                 eprintln!("failed to recv event from bus: {}", err);
