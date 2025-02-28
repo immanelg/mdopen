@@ -22,6 +22,8 @@ pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
 
+const TEMPLATE_VAR_WS_URL: &str = "ws_url";
+
 fn html_response(
     text: impl Into<Vec<u8>>,
     status: impl Into<StatusCode>,
@@ -37,7 +39,11 @@ fn not_found_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>404 Not Found</h1>";
     let html = render(
         INDEX,
-        [("title", "mdopen"), ("body", body), ("ws_url", "null")],
+        [
+            ("title", "mdopen"),
+            ("body", body),
+            (TEMPLATE_VAR_WS_URL, "null"),
+        ],
     )
     .unwrap();
     html_response(html, 404)
@@ -47,7 +53,11 @@ fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
     let body = "<h1>500 Internal Server Error</h1>";
     let html = render(
         INDEX,
-        [("title", "mdopen"), ("body", body), ("ws_url", "null")],
+        [
+            ("title", "mdopen"),
+            ("body", body),
+            (TEMPLATE_VAR_WS_URL, "null"),
+        ],
     )
     .unwrap();
     html_response(html, 500)
@@ -141,7 +151,7 @@ fn serve_file(
             [
                 ("title", title),
                 ("body", &listing),
-                ("ws_url", &websocket_url),
+                (TEMPLATE_VAR_WS_URL, &websocket_url),
             ],
         )
         .unwrap();
@@ -169,7 +179,7 @@ fn serve_file(
                 [
                     ("title", title),
                     ("body", &body),
-                    ("ws_url", &websocket_url),
+                    (TEMPLATE_VAR_WS_URL, &websocket_url),
                 ],
             )
             .unwrap();
