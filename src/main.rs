@@ -224,7 +224,9 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
             } else {
                 None
             }
-        }).is_none() {
+        })
+        .is_none()
+    {
         // Not websocket
         return AcceptWebsocketResult::Continue(request);
     };
@@ -262,7 +264,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
         );
 
     let mut stream = request.upgrade("websocket", response);
-    info!("connected to websocket");
+    debug!("connected to websocket");
     thread::spawn(move || loop {
         let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
         match reader.recv() {
@@ -277,7 +279,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
                 }
             },
             Err(err) => {
-                eprintln!("failed to recv event from bus: {}", err);
+                error!("failed to recv event from bus: {}", err);
             }
         }
     });
@@ -382,7 +384,7 @@ fn main() {
     }
 
     for request in server.incoming_requests() {
-        debug!("{} {}", request.method(), request.url());
+        debug!("request {} {}", request.method(), request.url());
         let reader = {
             let mut bus = incoming_bus.lock().unwrap();
             bus.add_rx()

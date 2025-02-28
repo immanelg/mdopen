@@ -27,3 +27,6 @@ bus = "2.4.1"
 
 [profile.release]
 strip = true
+
+[dev-dependencies]
+reqwest = { version = "0.12.12", features = ["blocking"] }
