@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{title}}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="/@/style.css">
+<style>
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-color: #0d1117;
+    }
+  }
+  .markdown-body {
+    box-sizing: border-box;
+    min-width: 200px;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 45px;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+
+<div class="markdown-body">
+{# <p><a href='#' onclick='history.back();'>Go back</a></p> #}
+{# <p><a href='/'>Home</a></p> #}
+{{markdown_body|safe}}
+{% endblock %}
+
+{% block extra %}
+{% if enable_syntax_highlight %}
+{# highlight.js #}
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github-dark.min.css"
+  media="(prefers-color-scheme: dark)" rel="stylesheet">
+<link href="https://unpkg.com/@highlightjs/cdn-assets@11.4.0/styles/github.min.css"
+  media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)" rel="stylesheet">
+<script>hljs.highlightAll();</script>
+{% endif %}
+
+{% if enable_latex %}
+{# KaTeX #}
+<script nomodule defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.js"
+  integrity="sha384-IolEJdmwZJpJkyCvXBnmGt8wXcP3nvRjxBjPv7/PWW7oODJhZ+qiY1sDpwgjcKLT" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.css"
+  integrity="sha384-K1E1xaIzoWihlXfiT5fcmLNabsnrl+dqc0errnRwtMX14tKRA9cCYNDGnXiHEZMs" crossorigin="anonymous">
+<script type="module" type="text/javascript">
+  import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.mjs';
+  const nodes = Array.from(document.body.querySelectorAll('.math'))
+  for (const node of nodes) {
+    katex.render(node.textContent, node, {throwOnError: false})
+  }
+</script>
+{% endif %}
+
+{% if enable_reload %}
+{# Live reload on fs watcher notification #}
+<script>
+  const wsUrl = "{{websocket_url}}";
+  console.assert(wsUrl);
+  const socket = new WebSocket(wsUrl, "ping");
+  console.log("WS: ", socket);
+  socket.onmessage = (e) => console.log(e);
+  socket.addEventListener("message", (event) => {
+    console.log("WS message: ", event.data);
+    window.location.reload();
+  });
+  socket.addEventListener("error", (event) => {
+    console.log("WS error: ", event);
+  });
+</script>
+{% endif %}
+{% endblock %}
