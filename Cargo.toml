@@ -24,6 +24,8 @@ sha1 = "0.10.6"
 base64 = "0.22.1"
 notify = "8.0.0"
 bus = "2.4.1"
+minijinja = "2.7.0"
+serde = { version = "1.0.218", features = ["derive"] }
 
 [profile.release]
 strip = true

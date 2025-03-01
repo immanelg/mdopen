@@ -1,4 +1,5 @@
 use log::{debug, error, info};
+use minijinja::{context, Environment};
 use nanotemplate::template as render;
 use notify::Watcher;
 use percent_encoding::percent_decode;
@@ -16,12 +17,9 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 mod cli;
 mod markdown;
 
-pub static INDEX: &str = include_str!("template/index.html");
 pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
 
 pub static STATIC_PREFIX: &str = "/@/";
-
-const TEMPLATE_VAR_WS_URL: &str = "ws_url";
 
 fn html_response(
     text: impl Into<Vec<u8>>,
@@ -34,43 +32,37 @@ fn html_response(
         .with_status_code(status)
 }
 
-fn not_found_response() -> Response<Cursor<Vec<u8>>> {
-    let body = "<h1>404 Not Found</h1>";
-    let html = render(
-        INDEX,
-        [
-            ("title", "mdopen"),
-            ("body", body),
-            (TEMPLATE_VAR_WS_URL, "null"),
-        ],
-    )
-    .unwrap();
+fn not_found_response(jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
+    let tpl = jinja_env.get_template("error.html").unwrap();
+    let html = tpl
+        .render(context! {
+            title => "Not Found",
+            error_header => "404 File Not Found",
+        })
+        .unwrap();
     html_response(html, 404)
 }
 
-fn internal_error_response() -> Response<Cursor<Vec<u8>>> {
-    let body = "<h1>500 Internal Server Error</h1>";
-    let html = render(
-        INDEX,
-        [
-            ("title", "mdopen"),
-            ("body", body),
-            (TEMPLATE_VAR_WS_URL, "null"),
-        ],
-    )
-    .unwrap();
+fn internal_error_response(jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
+    let tpl = jinja_env.get_template("error.html").unwrap();
+    let html = tpl
+        .render(context! {
+            title => "Error!",
+            error_header => "500 Internal Server Error",
+        })
+        .unwrap();
     html_response(html, 500)
 }
 
 /// Returns response for static content request
-fn try_asset_file(request: &Request) -> Option<Response<Cursor<Vec<u8>>>> {
+fn try_asset_file(request: &Request, jinja_env: &Environment) -> Option<Response<Cursor<Vec<u8>>>> {
     let asset_url = request.url().strip_prefix(STATIC_PREFIX)?;
 
     let data = match asset_url {
         "style.css" => GITHUB_STYLE,
         _ => {
             info!("not found: {}", &asset_url);
-            return Some(not_found_response());
+            return Some(not_found_response(jinja_env));
         }
     };
     let resp = Response::from_data(data)
@@ -98,10 +90,11 @@ fn mime_type(ext: &str) -> Option<&'static str> {
 fn serve_file(
     request: &Request,
     server_addr: &SocketAddr,
+    jinja_env: &Environment,
 ) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
 
-    let websocket_url = format!("\"ws://{}:{}\"", server_addr.ip(), server_addr.port());
+    let websocket_url = format!("ws://{}:{}", server_addr.ip(), server_addr.port());
 
     let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
     let relative_path = Path::new(url.as_ref())
@@ -109,51 +102,47 @@ fn serve_file(
         .expect("url should have / prefix");
     let absolute_path = cwd.join(relative_path);
 
-    let title = absolute_path
+    let file_path = absolute_path
         .file_name()
         .and_then(OsStr::to_str)
         .unwrap_or("mdopen");
 
     if !absolute_path.exists() {
         info!("not found: {}", request.url());
-        return Ok(not_found_response());
+        return Ok(not_found_response(jinja_env));
     }
 
     if absolute_path.is_dir() {
         let entries = fs::read_dir(&absolute_path)?;
 
-        let mut listing = String::new();
-
-        for entry in entries {
-            let Ok(entry) = entry else {
-                continue;
-            };
-            let entry_abs_path = entry.path();
-            let entry_name = entry_abs_path
-                .file_name()
-                .expect("filepath")
-                .to_string_lossy()
-                .to_string();
-            let href = relative_path
-                .join(&entry_name)
-                .to_string_lossy()
-                .to_string();
-            _ = write!(listing, "<li><a href='/{}'>{}</a></li>", &href, &entry_name);
+        #[derive(serde::Serialize)]
+        struct TemplateDirectoryItem {
+            pub name: String,
+            pub path: String,
+            // metadata? dont care
         }
+        let files: Vec<TemplateDirectoryItem> = entries
+            .filter_map(|e| e.ok())
+            .map(|e| {
+                let path = e.path();
+                let name = path
+                        .file_name()
+                        .expect("filename")
+                        .to_string_lossy()
+                        .into_owned();
+                let path = relative_path.join(&name).to_string_lossy().to_string();
+                TemplateDirectoryItem { name, path }
+                }
+            )
+            .collect();
+        let tpl = jinja_env.get_template("dir.html").unwrap();
+        let html = tpl
+            .render(context! {
+                dir_path => file_path,
+                files => files,
+            })
+            .unwrap();
 
-        if listing.is_empty() {
-            listing.push_str("Nothing to see here");
-        }
-        let listing = format!("<h1>Directory</h1><ul>{}</ul>", listing);
-        let html = render(
-            INDEX,
-            [
-                ("title", title),
-                ("body", &listing),
-                (TEMPLATE_VAR_WS_URL, &websocket_url),
-            ],
-        )
-        .unwrap();
         return Ok(html_response(html, 200));
     }
 
@@ -170,18 +159,20 @@ fn serve_file(
         "md" | "markdown" => {
             mime = Some("text/html");
 
-            let md = String::from_utf8_lossy(&data).to_string();
-            let body = markdown::to_html(&md);
+            let data = String::from_utf8_lossy(&data).to_string();
+            let body = markdown::to_html(&data);
 
-            let html = render(
-                INDEX,
-                [
-                    ("title", title),
-                    ("body", &body),
-                    (TEMPLATE_VAR_WS_URL, &websocket_url),
-                ],
-            )
-            .unwrap();
+            let tpl = jinja_env.get_template("page.html").unwrap();
+            let html = tpl
+                .render(context! {
+                    title => file_path,
+                    markdown_body => body,
+                    websocket_url => websocket_url,
+                    enable_syntax_highlight => true,
+                    enable_latex => true,
+                    enable_reload => true,
+                })
+                .unwrap();
             html.into()
         }
         _ => data,
@@ -224,7 +215,9 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
             } else {
                 None
             }
-        }).is_none() {
+        })
+        .is_none()
+    {
         // Not websocket
         return AcceptWebsocketResult::Continue(request);
     };
@@ -265,16 +258,18 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
     info!("connected to websocket");
     thread::spawn(move || loop {
         let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        use notify::EventKind as K;
         match reader.recv() {
             Ok(event) => match event.kind {
-                notify::EventKind::Access(_) => {}
-                _ => {
+                K::Remove(_) | K::Create(_) |
+                K::Modify(_) => {
                     debug!("modification event: {:?}", event);
                     assert!(!hello_frame.is_empty());
                     stream.write_all(hello_frame).unwrap();
                     stream.flush().unwrap();
                     return;
                 }
+                _ => {},
             },
             Err(err) => {
                 eprintln!("failed to recv event from bus: {}", err);
@@ -285,14 +280,14 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
 }
 
 /// Route a request and respond to it.
-fn handle(request: Request, server_addr: &SocketAddr, reader: Reader) {
+fn handle(request: Request, server_addr: &SocketAddr, reader: Reader, jinja_env: &Environment) {
     if request.method() != &Method::Get {
         info!("method not allowed: {} {}", request.method(), request.url());
         let _ = request.respond(html_response("<h1>405 Method Not Allowed</h1>", 405));
         return;
     }
 
-    if let Some(response) = try_asset_file(&request) {
+    if let Some(response) = try_asset_file(&request, jinja_env) {
         let _ = request.respond(response);
         return;
     };
@@ -302,13 +297,13 @@ fn handle(request: Request, server_addr: &SocketAddr, reader: Reader) {
         AcceptWebsocketResult::Continue(request) => request,
     };
 
-    match serve_file(&request, server_addr) {
+    match serve_file(&request, server_addr, jinja_env) {
         Ok(r) => {
             let _ = request.respond(r);
         }
         Err(err) => {
             error!("cannot serve file: {}", err);
-            let _ = request.respond(internal_error_response());
+            let _ = request.respond(internal_error_response(jinja_env));
         }
     }
 }
@@ -326,6 +321,14 @@ type Reader = bus::BusReader<Event>;
 fn broadcaster<T>(len: usize) -> Arc<Mutex<bus::Bus<T>>> {
     let bus = bus::Bus::new(len);
     Arc::new(Mutex::new(bus))
+}
+
+struct Context<'c> {
+    jinja_env: Environment<'c>,
+    addr: SocketAddr,
+    enable_reload: bool,
+    enable_latex: bool,
+    enable_syntax_highlight: bool,
 }
 
 fn main() {
@@ -367,6 +370,8 @@ fn main() {
         watcher
             .watch(path, notify::RecursiveMode::Recursive)
             .unwrap();
+        // FIXME: unwraps File Not Found
+        // FIXME: https://github.com/notify-rs/notify/issues/247
     }
 
     if !args.files.is_empty() {
@@ -381,12 +386,37 @@ fn main() {
         });
     }
 
+    //let mut cx = Context {
+    //    jinja_env: Environment::new(),
+    //
+    //    enable_latex: true,
+    //    enable_reload: true,
+    //    enable_syntax_highlight: true,
+    //    addr,
+    //};
+
+    let mut jinja_env = Environment::new();
+    jinja_env.set_auto_escape_callback(|_filename| minijinja::AutoEscape::None);
+    jinja_env.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
+    jinja_env
+        .add_template("base.html", include_str!("template/base.html"))
+        .unwrap();
+    jinja_env
+        .add_template("page.html", include_str!("template/page.html"))
+        .unwrap();
+    jinja_env
+        .add_template("dir.html", include_str!("template/dir.html"))
+        .unwrap();
+    jinja_env
+        .add_template("error.html", include_str!("template/error.html"))
+        .unwrap();
+
     for request in server.incoming_requests() {
         debug!("{} {}", request.method(), request.url());
         let reader = {
             let mut bus = incoming_bus.lock().unwrap();
             bus.add_rx()
         };
-        handle(request, &addr, reader);
+        handle(request, &addr, reader, &jinja_env);
     }
 }
