@@ -10,7 +10,7 @@
 
 Quickly preview local markdown files in browser with GitHub-like look.
 
-Doesn't use GitHub API, but locally compiles markdown to HTML in Rust and renders it in a browser.
+Doesn't use GitHub API, but locally compiles markdown to HTML in Rust and renders it for a browser.
 
 Supports most of the GitHub markdown features, including syntax highlighting and math formulas.
 
@@ -20,24 +20,23 @@ Supports hot-reload.
 
 # Installation
 
-Install from crates.io:
-
-```sh
-cargo install mdopen
-```
-
-or directly from this repo:
+Install from main branch:
 ```sh
 cargo install --git https://github.com/immanelg/mdopen.git
 ```
 
+Install from crates.io:
+```sh
+cargo install mdopen
+```
+
 # Usage
 
-Start the server and `README.md` in your favourite browser:
-
+Start the server and open served `README.md` in Firefox:
 ```sh
-mdopen README.md --browser firefox
+mdopen --browser firefox README.md 
 ```
+Run `mdopen --help` for more info.
 
 # Acknowledgements
 [grip](https://github.com/joeyespo/grip) is similar.
