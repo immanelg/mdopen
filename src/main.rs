@@ -264,18 +264,12 @@ fn accept_websocket(request: Request, mut watcher_rx: WatcherBusReader)  {
     debug!("accepted websocket");
     thread::spawn(move || loop {
         let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f]; // TODO: uhhhhhhh
-        use notify::EventKind as Kind;
         match watcher_rx.recv() {
             Ok(event) =>  {
-                match event.kind {
-                    Kind::Remove(_) | Kind::Create(_) | Kind::Modify(_) => {
-                        debug!("watcher_rx received: {:?} {:?}", event.kind, &event.paths);
-                        stream.write_all(hello_frame).unwrap();
-                        stream.flush().unwrap();
-                        return;
-                    }
-                    Kind::Access(_) | Kind::Other | Kind::Any => {}
-                }
+                debug!("watcher_rx received: {:?} {:?}", event.kind, &event.paths);
+                stream.write_all(hello_frame).unwrap();
+                stream.flush().unwrap();
+                return;
             }
             Err(err) => {
                 error!("failed to recv event from bus: {}", err);
@@ -355,10 +349,17 @@ fn main() {
 
     let watcher_bus_notify = watcher_bus.clone();
     let mut watcher = notify::RecommendedWatcher::new(
-        move |event| {
+        move |event: Result<notify::Event, notify::Error>| {
             if let Ok(event) = event {
-                let mut watcher_bus = watcher_bus_notify.write().unwrap();
-                watcher_bus.broadcast(event);
+                use notify::EventKind as Kind;
+                match event.kind {
+                    Kind::Remove(_) | Kind::Create(_) | Kind::Modify(_) => {
+                        debug!("watcher broadcast: {:?} {:?}", event.kind, &event.paths);
+                        let mut watcher_bus = watcher_bus_notify.write().unwrap();
+                        watcher_bus.broadcast(event);
+                    }
+                    Kind::Access(_) | Kind::Other | Kind::Any => {}
+                }
             }
         },
         notify::Config::default(),
