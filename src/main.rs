@@ -8,7 +8,7 @@ use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
@@ -207,7 +207,7 @@ fn convert_websocket_key(input: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(output.as_slice())
 }
 
-fn accept_websocket(request: Request, mut reader: BusReader)  {
+fn accept_websocket(request: Request, mut watcher_rx: WatcherBusReader)  {
     if request
         .headers()
         .iter()
@@ -221,7 +221,8 @@ fn accept_websocket(request: Request, mut reader: BusReader)  {
         })
         .is_none()
     {
-            let response = tiny_http::Response::from_data("Expected 'Upgrade: websocket'").with_status_code(400);
+            debug!("websocket accept failed: no 'Upgrade: websocket'");
+            let response = tiny_http::Response::from_data("Expected 'Upgrade: websocket' header").with_status_code(400);
             let _ = request.respond(response);
             return;
     };
@@ -233,7 +234,8 @@ fn accept_websocket(request: Request, mut reader: BusReader)  {
         .map(|h| h.value.clone())
     {
         None => {
-            let response = tiny_http::Response::from_data("Expected 'Sec-WebSocket-Key'").with_status_code(400);
+            debug!("websocket accept failed: no 'Sec-WebSocket-Key'");
+            let response = tiny_http::Response::from_data("Expected 'Sec-WebSocket-Key' header").with_status_code(400);
             let _ = request.respond(response);
             return;
         }
@@ -241,12 +243,12 @@ fn accept_websocket(request: Request, mut reader: BusReader)  {
     };
 
     // building the "101 Switching Protocols" response
-    let response = tiny_http::Response::new_empty(tiny_http::StatusCode(101))
+    let response = Response::new_empty(tiny_http::StatusCode(101))
         .with_header("Upgrade: websocket".parse::<tiny_http::Header>().unwrap())
         .with_header("Connection: Upgrade".parse::<tiny_http::Header>().unwrap())
         .with_header(
             "Sec-WebSocket-Protocol: ping"
-                .parse::<tiny_http::Header>()
+                .parse::<Header>()
                 .unwrap(),
         )
         .with_header(
@@ -254,34 +256,37 @@ fn accept_websocket(request: Request, mut reader: BusReader)  {
                 "Sec-WebSocket-Accept: {}",
                 convert_websocket_key(key.as_str())
             )
-            .parse::<tiny_http::Header>()
+            .parse::<Header>()
             .unwrap(),
         );
 
     let mut stream = request.upgrade("websocket", response);
-    debug!("connected to websocket");
+    debug!("accepted websocket");
     thread::spawn(move || loop {
-        let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
-        use notify::EventKind as K;
-        match reader.recv() {
-            Ok(event) => match event.kind {
-                K::Remove(_) | K::Create(_) | K::Modify(_) => {
-                    debug!("modification event: {:?}", event);
-                    stream.write_all(hello_frame).unwrap();
-                    stream.flush().unwrap();
-                    return;
+        let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f]; // TODO: uhhhhhhh
+        use notify::EventKind as Kind;
+        match watcher_rx.recv() {
+            Ok(event) =>  {
+                match event.kind {
+                    Kind::Remove(_) | Kind::Create(_) | Kind::Modify(_) => {
+                        debug!("watcher change: {:?} {:?}", event.kind, &event.paths);
+                        stream.write_all(hello_frame).unwrap();
+                        stream.flush().unwrap();
+                        return;
+                    }
+                    Kind::Access(_) | Kind::Other | Kind::Any => {}
                 }
-                _ => {}
-            },
+            }
             Err(err) => {
                 error!("failed to recv event from bus: {}", err);
+                return;
             }
         }
     });
 }
 
 /// Route a request and respond to it.
-fn handle(request: Request, config: &AppConfig, bus_reader: BusReader, jinja_env: &Environment) {
+fn handle(request: Request, config: &AppConfig, watcher_rx: WatcherBusReader, jinja_env: &Environment) {
     if request.method() != &Method::Get {
         let response = error_response(StatusCode(405), jinja_env);
         let _ = request.respond(response);
@@ -290,15 +295,17 @@ fn handle(request: Request, config: &AppConfig, bus_reader: BusReader, jinja_env
     let url = request.url().to_owned();
 
     if let Some(_path) = url.strip_prefix(RELOAD_PREFIX) {
-        accept_websocket(request, bus_reader);
-    } else if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
-        let response = handle_asset(path, jinja_env);
-        let _ = request.respond(response);
+        accept_websocket(request, watcher_rx);
         return;
+    } 
+    let response = if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
+        handle_asset(path, jinja_env)
     } else {
-        let response = serve_file(&url, config, jinja_env);
-        let _ = request.respond(response);
-    }
+        serve_file(&url, config, jinja_env)
+    };
+    if let Err(err) = request.respond(response) {
+        error!("cannot respond: {}", err);
+    };
 }
 
 fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
@@ -308,12 +315,7 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
     }
 }
 
-type BusReader = bus::BusReader<notify::Event>;
-
-fn broadcaster<T>(len: usize) -> Arc<Mutex<bus::Bus<T>>> {
-    let bus = bus::Bus::new(len);
-    Arc::new(Mutex::new(bus))
-}
+type WatcherBusReader = bus::BusReader<notify::Event>;
 
 struct AppConfig {
     addr: SocketAddr,
@@ -349,29 +351,24 @@ fn main() {
 
     info!("serving at http://{}", config.addr);
 
-    let bus = broadcaster(100);
-    let incoming_bus = bus.clone();
+    let watcher_bus = Arc::new(RwLock::new(bus::Bus::new(8)));
 
+    let watcher_bus_notify = watcher_bus.clone();
     let mut watcher = notify::RecommendedWatcher::new(
-        move |result: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = result {
-                let mut bus = bus.lock().unwrap();
-                debug!("broadcasting event: {:?}", event);
-                bus.try_broadcast(event).unwrap();
+        move |event| {
+            if let Ok(event) = event {
+                let mut watcher_bus = watcher_bus_notify.write().unwrap();
+                watcher_bus.broadcast(event);
             }
         },
         notify::Config::default(),
     )
     .unwrap();
 
-    for file in args.files.iter() {
-        let path = Path::new(file);
-        watcher
-            .watch(path, notify::RecursiveMode::Recursive)
-            .unwrap();
-        // FIXME: opening a directory is watching the whole dir and spams messages
-        // FIXME: unwraps File Not Found
-        // FIXME: https://github.com/notify-rs/notify/issues/247
+    if config.enable_reload {
+        watcher.watch(".".as_ref(), notify::RecursiveMode::Recursive).unwrap();
+        debug!("watching directory: .");
+        // NOTE: https://github.com/notify-rs/notify/issues/247
     }
 
     if !args.files.is_empty() {
@@ -403,11 +400,8 @@ fn main() {
         .unwrap();
 
     for request in server.incoming_requests() {
-        debug!("request {} {}", request.method(), request.url());
-        let reader = {
-            let mut bus = incoming_bus.lock().unwrap();
-            bus.add_rx()
-        };
-        handle(request, &config, reader, &jinja_env);
+        debug!("{} {}", request.method(), request.url());
+        let watcher_rx = watcher_bus.write().unwrap().add_rx();
+        handle(request, &config, watcher_rx, &jinja_env);
     }
 }
