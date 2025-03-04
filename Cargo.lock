@@ -819,7 +819,6 @@ dependencies = [
  "lexopt",
  "log",
  "minijinja",
- "nanotemplate",
  "notify",
  "open",
  "percent-encoding",
@@ -871,12 +870,6 @@ dependencies = [
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.52.0",
 ]
-
-[[package]]
-name = "nanotemplate"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f247bfe894f8a04e0d8b1eb5eed9dfb7424f6dda47cf83e3f03670e87cb2831b"
 
 [[package]]
 name = "native-tls"

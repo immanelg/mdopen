@@ -1,11 +1,9 @@
 use log::{debug, error, info};
 use minijinja::{context, Environment};
-use nanotemplate::template as render;
 use notify::Watcher;
 use percent_encoding::percent_decode;
 use std::env;
 use std::ffi::OsStr;
-use std::fmt::Write;
 use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
@@ -87,14 +85,8 @@ fn mime_type(ext: &str) -> Option<&'static str> {
     }
 }
 
-fn serve_file(
-    request: &Request,
-    server_addr: &SocketAddr,
-    jinja_env: &Environment,
-) -> io::Result<Response<Cursor<Vec<u8>>>> {
+fn serve_file(request: &Request, config: &AppConfig, jinja_env: &Environment) -> io::Result<Response<Cursor<Vec<u8>>>> {
     let cwd = env::current_dir()?;
-
-    let websocket_url = format!("ws://{}:{}", server_addr.ip(), server_addr.port());
 
     let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
     let relative_path = Path::new(url.as_ref())
@@ -126,14 +118,13 @@ fn serve_file(
             .map(|e| {
                 let path = e.path();
                 let name = path
-                        .file_name()
-                        .expect("filename")
-                        .to_string_lossy()
-                        .into_owned();
+                    .file_name()
+                    .expect("filename")
+                    .to_string_lossy()
+                    .into_owned();
                 let path = relative_path.join(&name).to_string_lossy().to_string();
                 TemplateDirectoryItem { name, path }
-                }
-            )
+            })
             .collect();
         let tpl = jinja_env.get_template("dir.html").unwrap();
         let html = tpl
@@ -165,12 +156,12 @@ fn serve_file(
             let tpl = jinja_env.get_template("page.html").unwrap();
             let html = tpl
                 .render(context! {
+                    websocket_url => config.addr,
                     title => file_path,
                     markdown_body => body,
-                    websocket_url => websocket_url,
-                    enable_syntax_highlight => true,
-                    enable_latex => true,
-                    enable_reload => true,
+                    enable_syntax_highlight => config.enable_syntax_highlight,
+                    enable_latex => config.enable_latex,
+                    enable_reload => config.enable_reload,
                 })
                 .unwrap();
             html.into()
@@ -204,7 +195,7 @@ enum AcceptWebsocketResult {
     Accepted,
 }
 
-fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptWebsocketResult {
+fn accept_websocket_or_continue(request: Request, mut reader: BusReader) -> AcceptWebsocketResult {
     if request
         .headers()
         .iter()
@@ -261,15 +252,13 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
         use notify::EventKind as K;
         match reader.recv() {
             Ok(event) => match event.kind {
-                K::Remove(_) | K::Create(_) |
-                K::Modify(_) => {
+                K::Remove(_) | K::Create(_) | K::Modify(_) => {
                     debug!("modification event: {:?}", event);
-                    assert!(!hello_frame.is_empty());
                     stream.write_all(hello_frame).unwrap();
                     stream.flush().unwrap();
                     return;
                 }
-                _ => {},
+                _ => {}
             },
             Err(err) => {
                 error!("failed to recv event from bus: {}", err);
@@ -280,7 +269,7 @@ fn accept_websocket_or_continue(request: Request, mut reader: Reader) -> AcceptW
 }
 
 /// Route a request and respond to it.
-fn handle(request: Request, server_addr: &SocketAddr, reader: Reader, jinja_env: &Environment) {
+fn handle(request: Request, config: &AppConfig, reader: BusReader, jinja_env: &Environment) {
     if request.method() != &Method::Get {
         info!("method not allowed: {} {}", request.method(), request.url());
         let _ = request.respond(html_response("<h1>405 Method Not Allowed</h1>", 405));
@@ -297,7 +286,7 @@ fn handle(request: Request, server_addr: &SocketAddr, reader: Reader, jinja_env:
         AcceptWebsocketResult::Continue(request) => request,
     };
 
-    match serve_file(&request, server_addr, jinja_env) {
+    match serve_file(&request, &config, jinja_env) {
         Ok(r) => {
             let _ = request.respond(r);
         }
@@ -315,32 +304,39 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
     }
 }
 
-type Event = notify::Event;
-type Reader = bus::BusReader<Event>;
+type BusReader = bus::BusReader<notify::Event>;
 
 fn broadcaster<T>(len: usize) -> Arc<Mutex<bus::Bus<T>>> {
     let bus = bus::Bus::new(len);
     Arc::new(Mutex::new(bus))
 }
 
-struct Context<'c> {
-    jinja_env: Environment<'c>,
+struct AppConfig {
+    //jinja_env: Environment<'_>,
     addr: SocketAddr,
     enable_reload: bool,
     enable_latex: bool,
     enable_syntax_highlight: bool,
 }
 
+struct AppContext<'c> {
+    jinja: minijinja::Environment<'c>,
+    //bus: bus::Bus,
+    config: AppConfig,
+}
+
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let args = cli::Args::parse();
+    let args = cli::CommandArgs::parse();
+    let config = AppConfig {
+        addr: SocketAddr::new(args.host, args.port), 
+        enable_reload: args.enable_reload,
+        enable_latex: args.enable_latex,
+        enable_syntax_highlight: args.enable_syntax_highlight,
+    };
 
-    let host = args.host;
-    let port = args.port;
-    let addr = SocketAddr::new(host, port);
-
-    let server = match Server::http(addr) {
+    let server = match Server::http(config.addr) {
         Ok(s) => s,
         Err(e) => {
             error!("cannot start server: {}", e);
@@ -348,7 +344,7 @@ fn main() {
         }
     };
 
-    info!("serving at http://{}", addr);
+    info!("serving at http://{}", config.addr);
 
     let bus = broadcaster(100);
     let incoming_bus = bus.clone();
@@ -377,7 +373,7 @@ fn main() {
     if !args.files.is_empty() {
         thread::spawn(move || {
             for file in args.files.into_iter() {
-                let url = format!("http://{}:{}/{}", &host, &port, &file);
+                let url = format!("http://{}/{}", &config.addr, &file);
                 info!("opening {}", &url);
                 if let Err(e) = open_browser(&args.browser, &url) {
                     error!("cannot open browser: {}", e);
@@ -385,15 +381,6 @@ fn main() {
             }
         });
     }
-
-    //let mut cx = Context {
-    //    jinja_env: Environment::new(),
-    //
-    //    enable_latex: true,
-    //    enable_reload: true,
-    //    enable_syntax_highlight: true,
-    //    addr,
-    //};
 
     let mut jinja_env = Environment::new();
     jinja_env.set_auto_escape_callback(|_filename| minijinja::AutoEscape::None);
@@ -417,6 +404,6 @@ fn main() {
             let mut bus = incoming_bus.lock().unwrap();
             bus.add_rx()
         };
-        handle(request, &addr, reader, &jinja_env);
+        handle(request, &config, reader, &jinja_env);
     }
 }

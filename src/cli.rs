@@ -9,7 +9,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const USAGE: &str = include_str!("cli_help.txt");
 
 #[derive(Debug)]
-pub struct Args {
+pub struct CommandArgs {
     pub files: Vec<String>,
     pub host: IpAddr,
     pub port: u16,
@@ -19,7 +19,7 @@ pub struct Args {
     pub enable_syntax_highlight: bool,
 }
 
-impl Args {
+impl CommandArgs {
     pub fn parse() -> Self {
         match parse_args() {
             Ok(args) => args,
@@ -31,8 +31,8 @@ impl Args {
     }
 }
 
-fn parse_args() -> Result<Args, lexopt::Error> {
-    let mut args = Args {
+fn parse_args() -> Result<CommandArgs, lexopt::Error> {
+    let mut args = CommandArgs {
         host: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         port: 5032,
         browser: None,

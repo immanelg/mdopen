@@ -13,7 +13,6 @@ env_logger = { version = "0.11.3", default-features = false, features = [
 ] }
 lexopt = "0.3.0"
 log = "0.4.21"
-nanotemplate = "0.3.0"
 open = "5"
 percent-encoding = "2"
 pulldown-cmark = { version = "0.12.1", default-features = false, features = [
@@ -25,7 +24,7 @@ base64 = "0.22.1"
 notify = "8.0.0"
 bus = "2.4.1"
 minijinja = "2.7.0"
-serde = { version = "1.0.218", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 
 [profile.release]
 strip = true
