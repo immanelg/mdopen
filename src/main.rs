@@ -207,7 +207,7 @@ fn convert_websocket_key(input: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(output.as_slice())
 }
 
-fn accept_websocket(request: Request, mut watcher_rx: WatcherBusReader)  {
+fn accept_websocket(request: Request, watcher_bus: WatcherBus)  {
     if request
         .headers()
         .iter()
@@ -262,6 +262,7 @@ fn accept_websocket(request: Request, mut watcher_rx: WatcherBusReader)  {
 
     let mut stream = request.upgrade("websocket", response);
     debug!("accepted websocket");
+    let mut watcher_rx = watcher_bus.write().unwrap().add_rx();
     thread::spawn(move || loop {
         let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f]; // TODO: uhhhhhhh
         match watcher_rx.recv() {
@@ -280,7 +281,7 @@ fn accept_websocket(request: Request, mut watcher_rx: WatcherBusReader)  {
 }
 
 /// Route a request and respond to it.
-fn handle(request: Request, config: &AppConfig, watcher_rx: WatcherBusReader, jinja_env: &Environment) {
+fn handle(request: Request, config: &AppConfig, jinja_env: &Environment, watcher_bus: WatcherBus) {
     if request.method() != &Method::Get {
         let response = error_response(StatusCode(405), jinja_env);
         let _ = request.respond(response);
@@ -289,7 +290,7 @@ fn handle(request: Request, config: &AppConfig, watcher_rx: WatcherBusReader, ji
     let url = request.url().to_owned();
 
     if let Some(_path) = url.strip_prefix(RELOAD_PREFIX) {
-        accept_websocket(request, watcher_rx);
+        accept_websocket(request, watcher_bus);
         return;
     } 
     let response = if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
@@ -310,6 +311,7 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
 }
 
 type WatcherBusReader = bus::BusReader<notify::Event>;
+type WatcherBus = Arc<RwLock<bus::Bus<notify::Event>>>;
 
 struct AppConfig {
     addr: SocketAddr,
@@ -402,7 +404,6 @@ fn main() {
 
     for request in server.incoming_requests() {
         debug!("{} {}", request.method(), request.url());
-        let watcher_rx = watcher_bus.write().unwrap().add_rx();
-        handle(request, &config, watcher_rx, &jinja_env);
+        handle(request, &config, &jinja_env, watcher_bus.clone());
     }
 }
