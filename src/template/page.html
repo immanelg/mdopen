@@ -57,7 +57,7 @@
 {% if enable_reload %}
 {# Live reload on fs watcher notification #}
 <script>
-  const wsUrl = "ws://{{websocket_url}}";
+  const wsUrl = "{{websocket_url}}";
   console.assert(wsUrl);
   const socket = new WebSocket(wsUrl, "ping");
   console.log("WS: ", socket);

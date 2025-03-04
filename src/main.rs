@@ -7,7 +7,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
@@ -15,13 +15,14 @@ use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 mod cli;
 mod markdown;
 
-pub static GITHUB_STYLE: &[u8] = include_bytes!("vendor/github.css");
+pub static STYLE_CSS: &[u8] = include_bytes!("vendor/github.css");
 
-pub static STATIC_PREFIX: &str = "/@/";
+pub static ASSETS_PREFIX: &str = "/__mdopen_assets/";
+pub static RELOAD_PREFIX: &str = "/__mdopen_reload/";
 
 fn html_response(
     text: impl Into<Vec<u8>>,
-    status: impl Into<StatusCode>,
+    status: StatusCode,
 ) -> Response<Cursor<Vec<u8>>> {
     Response::from_data(text.into())
         .with_header(
@@ -30,44 +31,15 @@ fn html_response(
         .with_status_code(status)
 }
 
-fn not_found_response(jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
+fn error_response(error_code: StatusCode, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
     let tpl = jinja_env.get_template("error.html").unwrap();
     let html = tpl
         .render(context! {
-            title => "Not Found",
-            error_header => "404 File Not Found",
+            title => "Error",
+            error_header => error_code.default_reason_phrase(),
         })
         .unwrap();
-    html_response(html, 404)
-}
-
-fn internal_error_response(jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
-    let tpl = jinja_env.get_template("error.html").unwrap();
-    let html = tpl
-        .render(context! {
-            title => "Error!",
-            error_header => "500 Internal Server Error",
-        })
-        .unwrap();
-    html_response(html, 500)
-}
-
-/// Returns response for static content request
-fn try_asset_file(request: &Request, jinja_env: &Environment) -> Option<Response<Cursor<Vec<u8>>>> {
-    let asset_url = request.url().strip_prefix(STATIC_PREFIX)?;
-
-    let data = match asset_url {
-        "style.css" => GITHUB_STYLE,
-        _ => {
-            info!("not found: {}", &asset_url);
-            return Some(not_found_response(jinja_env));
-        }
-    };
-    let resp = Response::from_data(data)
-        .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
-        .with_status_code(200);
-
-    Some(resp)
+    html_response(html, StatusCode(404))
 }
 
 /// Get content type from extension.
@@ -80,31 +52,51 @@ fn mime_type(ext: &str) -> Option<&'static str> {
         "jpg" | "jpeg" => Some("image/jpeg"),
         "pdf" => Some("application/pdf"),
         "html" => Some("text/html"),
+        "md" => Some("text/markdown"),
         "txt" => Some("text/plain"),
         _ => None,
     }
 }
 
-fn serve_file(request: &Request, config: &AppConfig, jinja_env: &Environment) -> io::Result<Response<Cursor<Vec<u8>>>> {
+/// Returns response for static content request
+fn handle_asset(path: &str, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
+    let data = match path {
+        "style.css" => STYLE_CSS,
+        _ => {
+            info!("asset not found: {}", &path);
+            return error_response(StatusCode(404), jinja_env);
+        }
+    };
+    
+
+    Response::from_data(data)
+        .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
+        .with_status_code(200)
+}
+
+// Get file contents for server response
+// For directory, create listing in HTML
+// For markdown, create generate HTML
+// For other files, get its content
+fn get_contents(
+    path: &Path,
+    config: &AppConfig,
+    jinja_env: &Environment,
+) -> io::Result<Vec<u8>> {
     let cwd = env::current_dir()?;
 
-    let url = percent_decode(request.url().as_bytes()).decode_utf8_lossy();
-    let relative_path = Path::new(url.as_ref())
-        .strip_prefix("/")
-        .expect("url should have / prefix");
-    let absolute_path = cwd.join(relative_path);
+    let absolute_path = cwd.join(path);
 
     let file_path = absolute_path
         .file_name()
         .and_then(OsStr::to_str)
         .unwrap_or("mdopen");
 
-    if !absolute_path.exists() {
-        info!("not found: {}", request.url());
-        return Ok(not_found_response(jinja_env));
-    }
+    let Ok(metadata) = absolute_path.metadata() else {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "not found"));
+    };
 
-    if absolute_path.is_dir() {
+    if metadata.is_dir() {
         let entries = fs::read_dir(&absolute_path)?;
 
         #[derive(serde::Serialize)]
@@ -116,47 +108,42 @@ fn serve_file(request: &Request, config: &AppConfig, jinja_env: &Environment) ->
         let files: Vec<DirItem> = entries
             .filter_map(|e| e.ok())
             .map(|e| {
-                let path = e.path();
-                let name = path
+                let file_name = e.path()
                     .file_name()
                     .expect("filename")
                     .to_string_lossy()
                     .into_owned();
-                let path = relative_path.join(&name).to_string_lossy().to_string();
-                DirItem { name, path }
+                let file_path = path.join(&file_name).to_string_lossy().to_string();
+                DirItem { name: file_name, path: file_path }
             })
             .collect();
         let tpl = jinja_env.get_template("dir.html").unwrap();
         let html = tpl
             .render(context! {
-                dir_path => relative_path,
+                dir_path => path,
                 files => files,
             })
             .unwrap();
 
-        return Ok(html_response(html, 200));
+        return Ok(html.into_bytes());
     }
 
-    let ext = relative_path
+    let ext = path
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or_default();
-
-    let mut mime = mime_type(ext);
 
     let data = fs::read(&absolute_path)?;
 
     let data = match ext {
         "md" | "markdown" => {
-            mime = Some("text/html");
-
             let data = String::from_utf8_lossy(&data).to_string();
             let body = markdown::to_html(&data);
 
             let tpl = jinja_env.get_template("page.html").unwrap();
             let html = tpl
                 .render(context! {
-                    websocket_url => config.addr,
+                    websocket_url => format!("ws://{}{}", config.addr, RELOAD_PREFIX), // FIXME: add file path
                     title => file_path,
                     markdown_body => body,
                     enable_syntax_highlight => config.enable_syntax_highlight,
@@ -168,15 +155,45 @@ fn serve_file(request: &Request, config: &AppConfig, jinja_env: &Environment) ->
         }
         _ => data,
     };
+    Ok(data)
 
-    let resp = Response::from_data(data).with_status_code(200);
-    let resp = if let Some(mime) = mime {
-        resp.with_header(Header::from_bytes(&b"Content-Type"[..], mime).unwrap())
-    } else {
-        resp
-    };
+}
+fn serve_file(
+    url: &str,
+    config: &AppConfig,
+    jinja_env: &Environment,
+) -> Response<Cursor<Vec<u8>>> {
+    let path = PathBuf::from(percent_decode(url.as_bytes()).decode_utf8_lossy().into_owned());
+    let path_rel = path.strip_prefix("/").expect("url should have / prefix");
+    let contents = get_contents(path_rel, config, jinja_env);
+    match contents {
+        Ok(contents) => {
+            let mut response = Response::from_data(contents).with_status_code(200);
 
-    Ok(resp)
+            let ext = path_rel
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default();
+
+            // FIXME: should this be in get_contents()?
+            let mime = match mime_type(ext) {
+                Some("text/markdown") => Some("text/html"),
+                m => m,
+            };
+            if let Some(mime) = mime {
+                response = response.with_header(Header::from_bytes(&b"Content-Type"[..], mime).unwrap());
+            }
+
+            response
+        },
+        Err(err) => {
+            if err.kind() == io::ErrorKind::NotFound {
+                error_response(StatusCode(404), jinja_env)
+            } else {
+                error_response(StatusCode(500), jinja_env)
+            }
+        }
+    }
 }
 
 /// Turns a Sec-WebSocket-Key into a Sec-WebSocket-Accept.
@@ -190,12 +207,7 @@ fn convert_websocket_key(input: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(output.as_slice())
 }
 
-enum AcceptWebsocketResult {
-    Continue(Request),
-    Accepted,
-}
-
-fn accept_websocket_or_continue(request: Request, mut reader: BusReader) -> AcceptWebsocketResult {
+fn accept_websocket(request: Request, mut reader: BusReader)  {
     if request
         .headers()
         .iter()
@@ -209,8 +221,9 @@ fn accept_websocket_or_continue(request: Request, mut reader: BusReader) -> Acce
         })
         .is_none()
     {
-        // Not websocket
-        return AcceptWebsocketResult::Continue(request);
+            let response = tiny_http::Response::from_data("Expected 'Upgrade: websocket'").with_status_code(400);
+            let _ = request.respond(response);
+            return;
     };
 
     let key = match request
@@ -220,9 +233,9 @@ fn accept_websocket_or_continue(request: Request, mut reader: BusReader) -> Acce
         .map(|h| h.value.clone())
     {
         None => {
-            let response = tiny_http::Response::from_data([]).with_status_code(400);
+            let response = tiny_http::Response::from_data("Expected 'Sec-WebSocket-Key'").with_status_code(400);
             let _ = request.respond(response);
-            return AcceptWebsocketResult::Accepted;
+            return;
         }
         Some(k) => k,
     };
@@ -265,35 +278,26 @@ fn accept_websocket_or_continue(request: Request, mut reader: BusReader) -> Acce
             }
         }
     });
-    AcceptWebsocketResult::Accepted
 }
 
 /// Route a request and respond to it.
-fn handle(request: Request, config: &AppConfig, reader: BusReader, jinja_env: &Environment) {
+fn handle(request: Request, config: &AppConfig, bus_reader: BusReader, jinja_env: &Environment) {
     if request.method() != &Method::Get {
-        info!("method not allowed: {} {}", request.method(), request.url());
-        let _ = request.respond(html_response("<h1>405 Method Not Allowed</h1>", 405));
-        return;
-    }
-
-    if let Some(response) = try_asset_file(&request, jinja_env) {
+        let response = error_response(StatusCode(405), jinja_env);
         let _ = request.respond(response);
         return;
-    };
+    }
+    let url = request.url().to_owned();
 
-    let request = match accept_websocket_or_continue(request, reader) {
-        AcceptWebsocketResult::Accepted => return,
-        AcceptWebsocketResult::Continue(request) => request,
-    };
-
-    match serve_file(&request, &config, jinja_env) {
-        Ok(r) => {
-            let _ = request.respond(r);
-        }
-        Err(err) => {
-            error!("cannot serve file: {}", err);
-            let _ = request.respond(internal_error_response(jinja_env));
-        }
+    if let Some(_path) = url.strip_prefix(RELOAD_PREFIX) {
+        accept_websocket(request, bus_reader);
+    } else if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
+        let response = handle_asset(path, jinja_env);
+        let _ = request.respond(response);
+        return;
+    } else {
+        let response = serve_file(&url, config, jinja_env);
+        let _ = request.respond(response);
     }
 }
 
@@ -312,7 +316,6 @@ fn broadcaster<T>(len: usize) -> Arc<Mutex<bus::Bus<T>>> {
 }
 
 struct AppConfig {
-    //jinja_env: Environment<'_>,
     addr: SocketAddr,
     enable_reload: bool,
     enable_latex: bool,
@@ -330,7 +333,7 @@ fn main() {
 
     let args = cli::CommandArgs::parse();
     let config = AppConfig {
-        addr: SocketAddr::new(args.host, args.port), 
+        addr: SocketAddr::new(args.host, args.port),
         enable_reload: args.enable_reload,
         enable_latex: args.enable_latex,
         enable_syntax_highlight: args.enable_syntax_highlight,
