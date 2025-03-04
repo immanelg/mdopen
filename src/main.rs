@@ -269,7 +269,7 @@ fn accept_websocket(request: Request, mut watcher_rx: WatcherBusReader)  {
             Ok(event) =>  {
                 match event.kind {
                     Kind::Remove(_) | Kind::Create(_) | Kind::Modify(_) => {
-                        debug!("watcher change: {:?} {:?}", event.kind, &event.paths);
+                        debug!("watcher_rx received: {:?} {:?}", event.kind, &event.paths);
                         stream.write_all(hello_frame).unwrap();
                         stream.flush().unwrap();
                         return;
