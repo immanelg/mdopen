@@ -108,12 +108,12 @@ fn serve_file(request: &Request, config: &AppConfig, jinja_env: &Environment) ->
         let entries = fs::read_dir(&absolute_path)?;
 
         #[derive(serde::Serialize)]
-        struct TemplateDirectoryItem {
+        struct DirItem {
             pub name: String,
             pub path: String,
             // metadata? dont care
         }
-        let files: Vec<TemplateDirectoryItem> = entries
+        let files: Vec<DirItem> = entries
             .filter_map(|e| e.ok())
             .map(|e| {
                 let path = e.path();
@@ -123,13 +123,13 @@ fn serve_file(request: &Request, config: &AppConfig, jinja_env: &Environment) ->
                     .to_string_lossy()
                     .into_owned();
                 let path = relative_path.join(&name).to_string_lossy().to_string();
-                TemplateDirectoryItem { name, path }
+                DirItem { name, path }
             })
             .collect();
         let tpl = jinja_env.get_template("dir.html").unwrap();
         let html = tpl
             .render(context! {
-                dir_path => file_path,
+                dir_path => relative_path,
                 files => files,
             })
             .unwrap();
@@ -366,6 +366,7 @@ fn main() {
         watcher
             .watch(path, notify::RecursiveMode::Recursive)
             .unwrap();
+        // FIXME: opening a directory is watching the whole dir and spams messages
         // FIXME: unwraps File Not Found
         // FIXME: https://github.com/notify-rs/notify/issues/247
     }
