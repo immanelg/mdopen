@@ -55,22 +55,22 @@ fn parse_args() -> Result<CommandArgs, lexopt::Error> {
             Short('b') | Long("browser") => {
                 args.browser = Some(parser.value()?.parse()?);
             }
-            Long("enable-latex") => {
+            Long("latex") => {
                 args.enable_latex = true;
             }
-            Long("disable-latex") => {
+            Long("no-latex") => {
                 args.enable_latex = false;
             }
-            Long("enable-reload") => {
+            Long("reload") => {
                 args.enable_reload = true;
             }
-            Long("disable-reload") => {
+            Long("no-reload") => {
                 args.enable_reload = false;
             }
-            Long("enable-syntax-highlight") => {
+            Long("syntax-hl") => {
                 args.enable_syntax_highlight = true;
             }
-            Long("disable-syntax-highlight") => {
+            Long("no-syntax-hl") => {
                 args.enable_syntax_highlight = false;
             }
             Value(val) => {
