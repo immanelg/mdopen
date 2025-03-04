@@ -8,7 +8,7 @@ use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
