@@ -1,0 +1,31 @@
+Usage: mdopen [OPTIONS] [FILES...]
+Arguments:
+    [FILES...]
+        If the files are provided, they will be opened in the browser.
+Options:
+    -h, --help
+        Print help message and exit.
+    -v, --version
+        Print version and exit.
+    -b, --browser
+        Web Browser that will be used to open provided files.
+    --host
+        Host to use to run mdopen server.
+        Default: 127.0.0.1
+    -p, --port
+        Port to use to run mdopen server.
+        Default: 5032
+    --latex
+    --no-latex
+        Controls if mdopen will inlude KaTeX in HTML.
+        Default: true
+    --reload
+    --no-reload
+        Controls if mdopen will watch filesystem changes in the directory 
+        and live reload HTML page with WebSocket messages.
+        Default: false
+    --syntax-hl
+    --no-syntax-hl
+        Controls if mdopen will include syntax highlighting script for
+        code blocks in HTML.
+        Default: true

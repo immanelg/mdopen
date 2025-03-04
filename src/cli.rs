@@ -6,18 +6,20 @@ use lexopt::{
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const USAGE: &str =
-    "usage: mdopen [-h|--help] [-v|--version] [-b|--browser BROWSER] [-p|--port PORT] [--host HOST] [FILES...]";
+const USAGE: &str = include_str!("cli_help.txt");
 
 #[derive(Debug)]
-pub struct Args {
+pub struct CommandArgs {
     pub files: Vec<String>,
     pub host: IpAddr,
     pub port: u16,
     pub browser: Option<String>,
+    pub enable_reload: bool,
+    pub enable_latex: bool,
+    pub enable_syntax_highlight: bool,
 }
 
-impl Args {
+impl CommandArgs {
     pub fn parse() -> Self {
         match parse_args() {
             Ok(args) => args,
@@ -29,33 +31,57 @@ impl Args {
     }
 }
 
-fn parse_args() -> Result<Args, lexopt::Error> {
-    let mut host = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let mut port = 5032;
-    let mut browser = Option::<String>::None;
-    let mut files = Vec::<String>::new();
+fn parse_args() -> Result<CommandArgs, lexopt::Error> {
+    let mut args = CommandArgs {
+        host: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        port: 5032,
+        browser: None,
+        files: Vec::new(),
+        enable_latex: true,
+        enable_reload: false,
+        enable_syntax_highlight: true,
+    };
 
     let mut parser = lexopt::Parser::from_env();
 
     while let Some(arg) = parser.next()? {
         match arg {
             Long("host") => {
-                host = parser.value()?.parse()?;
+                args.host = parser.value()?.parse()?;
             }
             Short('p') | Long("port") => {
-                port = parser.value()?.parse()?;
+                args.port = parser.value()?.parse()?;
             }
             Short('b') | Long("browser") => {
-                browser = Some(parser.value()?.parse()?);
+                args.browser = Some(parser.value()?.parse()?);
+            }
+            Long("latex") => {
+                args.enable_latex = true;
+            }
+            Long("no-latex") => {
+                args.enable_latex = false;
+            }
+            Long("reload") => {
+                args.enable_reload = true;
+            }
+            Long("no-reload") => {
+                args.enable_reload = false;
+            }
+            Long("syntax-hl") => {
+                args.enable_syntax_highlight = true;
+            }
+            Long("no-syntax-hl") => {
+                args.enable_syntax_highlight = false;
             }
             Value(val) => {
-                files.push(val.parse()?);
+                args.files.push(val.parse()?);
             }
             Short('v') | Long("version") => {
                 eprintln!("{}", VERSION);
                 std::process::exit(0);
             }
             Short('h') | Long("help") => {
+                eprintln!("mdopen {}", VERSION);
                 eprintln!("{}", USAGE);
                 std::process::exit(0);
             }
@@ -63,10 +89,5 @@ fn parse_args() -> Result<Args, lexopt::Error> {
         }
     }
 
-    Ok(Args {
-        host,
-        port,
-        browser,
-        files,
-    })
+    Ok(args)
 }

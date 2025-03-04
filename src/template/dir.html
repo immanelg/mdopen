@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set title = dir_path %}
+{% block title %}Directory {{ dir_path }}{% endblock %}
+
+{% block body %}
+<h1>Directory <code>{{dir_path}}</code></h1>
+<ul>
+{% for file in files %}
+    <li ><a href="/{{file.path}}">{{ file.name }}</a></li>
+{% else %}
+<p>empty...</p>
+{% endfor %}
+</ul>
+{% endblock %}
+
+{% block extra %}
+{% endblock %}
