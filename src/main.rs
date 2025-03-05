@@ -295,10 +295,8 @@ fn handle(request: Request, config: &AppConfig, jinja_env: &Environment, watcher
         return;
     } 
     let response = if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
-        info!("asset {}", path);
         handle_asset(path, jinja_env)
     } else {
-        info!("file {}", url);
         serve_file(&url, config, jinja_env)
     };
     if let Err(err) = request.respond(response) {
