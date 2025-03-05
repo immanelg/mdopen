@@ -144,6 +144,7 @@ fn get_contents(
             let html = tpl
                 .render(context! {
                     websocket_url => format!("ws://{}{}", config.addr, RELOAD_PREFIX), // FIXME: add file path
+                    style_url => format!("{}style.css", ASSETS_PREFIX),
                     title => file_path,
                     markdown_body => body,
                     enable_syntax_highlight => config.enable_syntax_highlight,
@@ -294,8 +295,10 @@ fn handle(request: Request, config: &AppConfig, jinja_env: &Environment, watcher
         return;
     } 
     let response = if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
+        info!("asset {}", path);
         handle_asset(path, jinja_env)
     } else {
+        info!("file {}", url);
         serve_file(&url, config, jinja_env)
     };
     if let Err(err) = request.respond(response) {
@@ -310,7 +313,6 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
     }
 }
 
-type WatcherBusReader = bus::BusReader<notify::Event>;
 type WatcherBus = Arc<RwLock<bus::Bus<notify::Event>>>;
 
 struct AppConfig {
@@ -318,12 +320,6 @@ struct AppConfig {
     enable_reload: bool,
     enable_latex: bool,
     enable_syntax_highlight: bool,
-}
-
-struct AppContext<'c> {
-    jinja: minijinja::Environment<'c>,
-    //bus: bus::Bus,
-    config: AppConfig,
 }
 
 fn main() {
