@@ -28,6 +28,9 @@ serde = { version = "1", features = ["derive"] }
 
 [profile.release]
 strip = true
+opt-level = 3
+lto = true
+codegen-units = 1
 
 [dev-dependencies]
 reqwest = { version = "0.12.12", features = ["blocking"] }
