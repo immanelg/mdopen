@@ -25,6 +25,7 @@ notify = "8.0.0"
 bus = "2.4.1"
 minijinja = "2.7.0"
 serde = { version = "1", features = ["derive"] }
+syntect = "5.2.0"
 
 [profile.release]
 strip = true
