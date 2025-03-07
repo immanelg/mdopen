@@ -20,10 +20,7 @@ pub static STYLE_CSS: &[u8] = include_bytes!("vendor/github.css");
 pub static ASSETS_PREFIX: &str = "/__mdopen_assets/";
 pub static RELOAD_PREFIX: &str = "/__mdopen_reload/";
 
-fn html_response(
-    text: impl Into<Vec<u8>>,
-    status: StatusCode,
-) -> Response<Cursor<Vec<u8>>> {
+fn html_response(text: impl Into<Vec<u8>>, status: StatusCode) -> Response<Cursor<Vec<u8>>> {
     Response::from_data(text.into())
         .with_header(
             Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf8"[..]).unwrap(),
@@ -67,7 +64,6 @@ fn handle_asset(path: &str, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>
             return error_response(StatusCode(404), jinja_env);
         }
     };
-    
 
     Response::from_data(data)
         .with_header(Header::from_bytes(&b"Cache-Control"[..], &b"max-age=31536000"[..]).unwrap())
@@ -78,11 +74,7 @@ fn handle_asset(path: &str, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>
 // For directory, create listing in HTML
 // For markdown, create generate HTML
 // For other files, get its content
-fn get_contents(
-    path: &Path,
-    config: &AppConfig,
-    jinja_env: &Environment,
-) -> io::Result<Vec<u8>> {
+fn get_contents(path: &Path, config: &AppConfig, jinja_env: &Environment) -> io::Result<Vec<u8>> {
     let cwd = env::current_dir()?;
 
     let absolute_path = cwd.join(path);
@@ -108,13 +100,17 @@ fn get_contents(
         let files: Vec<DirItem> = entries
             .filter_map(|e| e.ok())
             .map(|e| {
-                let file_name = e.path()
+                let file_name = e
+                    .path()
                     .file_name()
                     .expect("filename")
                     .to_string_lossy()
                     .into_owned();
                 let file_path = path.join(&file_name).to_string_lossy().to_string();
-                DirItem { name: file_name, path: file_path }
+                DirItem {
+                    name: file_name,
+                    path: file_path,
+                }
             })
             .collect();
         let tpl = jinja_env.get_template("dir.html").unwrap();
@@ -157,14 +153,13 @@ fn get_contents(
         _ => data,
     };
     Ok(data)
-
 }
-fn serve_file(
-    url: &str,
-    config: &AppConfig,
-    jinja_env: &Environment,
-) -> Response<Cursor<Vec<u8>>> {
-    let path = PathBuf::from(percent_decode(url.as_bytes()).decode_utf8_lossy().into_owned());
+fn serve_file(url: &str, config: &AppConfig, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
+    let path = PathBuf::from(
+        percent_decode(url.as_bytes())
+            .decode_utf8_lossy()
+            .into_owned(),
+    );
     let path_rel = path.strip_prefix("/").expect("url should have / prefix");
     let contents = get_contents(path_rel, config, jinja_env);
     match contents {
@@ -182,11 +177,12 @@ fn serve_file(
                 m => m,
             };
             if let Some(mime) = mime {
-                response = response.with_header(Header::from_bytes(&b"Content-Type"[..], mime).unwrap());
+                response =
+                    response.with_header(Header::from_bytes(&b"Content-Type"[..], mime).unwrap());
             }
 
             response
-        },
+        }
         Err(err) => {
             if err.kind() == io::ErrorKind::NotFound {
                 error_response(StatusCode(404), jinja_env)
@@ -208,7 +204,7 @@ fn convert_websocket_key(input: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(output.as_slice())
 }
 
-fn accept_websocket(request: Request, watcher_bus: WatcherBus)  {
+fn accept_websocket(request: Request, watcher_bus: WatcherBus) {
     if request
         .headers()
         .iter()
@@ -222,10 +218,11 @@ fn accept_websocket(request: Request, watcher_bus: WatcherBus)  {
         })
         .is_none()
     {
-            debug!("websocket accept failed: no 'Upgrade: websocket'");
-            let response = tiny_http::Response::from_data("Expected 'Upgrade: websocket' header").with_status_code(400);
-            let _ = request.respond(response);
-            return;
+        debug!("websocket accept failed: no 'Upgrade: websocket'");
+        let response = tiny_http::Response::from_data("Expected 'Upgrade: websocket' header")
+            .with_status_code(400);
+        let _ = request.respond(response);
+        return;
     };
 
     let key = match request
@@ -236,7 +233,8 @@ fn accept_websocket(request: Request, watcher_bus: WatcherBus)  {
     {
         None => {
             debug!("websocket accept failed: no 'Sec-WebSocket-Key'");
-            let response = tiny_http::Response::from_data("Expected 'Sec-WebSocket-Key' header").with_status_code(400);
+            let response = tiny_http::Response::from_data("Expected 'Sec-WebSocket-Key' header")
+                .with_status_code(400);
             let _ = request.respond(response);
             return;
         }
@@ -247,11 +245,7 @@ fn accept_websocket(request: Request, watcher_bus: WatcherBus)  {
     let response = Response::new_empty(tiny_http::StatusCode(101))
         .with_header("Upgrade: websocket".parse::<tiny_http::Header>().unwrap())
         .with_header("Connection: Upgrade".parse::<tiny_http::Header>().unwrap())
-        .with_header(
-            "Sec-WebSocket-Protocol: ping"
-                .parse::<Header>()
-                .unwrap(),
-        )
+        .with_header("Sec-WebSocket-Protocol: ping".parse::<Header>().unwrap())
         .with_header(
             format!(
                 "Sec-WebSocket-Accept: {}",
@@ -267,7 +261,7 @@ fn accept_websocket(request: Request, watcher_bus: WatcherBus)  {
     thread::spawn(move || loop {
         let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f]; // TODO: uhhhhhhh
         match watcher_rx.recv() {
-            Ok(event) =>  {
+            Ok(event) => {
                 debug!("watcher_rx received: {:?} {:?}", event.kind, &event.paths);
                 stream.write_all(hello_frame).unwrap();
                 stream.flush().unwrap();
@@ -293,7 +287,7 @@ fn handle(request: Request, config: &AppConfig, jinja_env: &Environment, watcher
     if let Some(_path) = url.strip_prefix(RELOAD_PREFIX) {
         accept_websocket(request, watcher_bus);
         return;
-    } 
+    }
     let response = if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
         handle_asset(path, jinja_env)
     } else {
@@ -363,7 +357,9 @@ fn main() {
     .unwrap();
 
     if config.enable_reload {
-        watcher.watch(".".as_ref(), notify::RecursiveMode::Recursive).unwrap();
+        watcher
+            .watch(".".as_ref(), notify::RecursiveMode::Recursive)
+            .unwrap();
         debug!("watching directory: .");
         // NOTE: https://github.com/notify-rs/notify/issues/247
     }
