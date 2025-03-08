@@ -1,6 +1,4 @@
-use log::{debug, error, info};
 use minijinja::{context, Environment};
-use notify::Watcher;
 use percent_encoding::percent_decode;
 use std::env;
 use std::ffi::OsStr;
@@ -8,12 +6,23 @@ use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
 use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
+mod app_config;
 mod cli;
 mod markdown;
+
+#[cfg(feature = "reload")]
+mod watch;
+
+#[cfg(feature = "reload")]
+mod websocket;
+
+#[cfg(feature = "syntax")]
+mod syntax;
+
+use app_config::AppConfig;
 
 pub static STYLE_CSS: &[u8] = include_bytes!("vendor/github.css");
 
@@ -60,7 +69,7 @@ fn handle_asset(path: &str, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>
     let data = match path {
         "style.css" => STYLE_CSS,
         _ => {
-            info!("asset not found: {}", &path);
+            log::info!("asset not found: {}", &path);
             return error_response(StatusCode(404), jinja_env);
         }
     };
@@ -143,9 +152,8 @@ fn get_contents(path: &Path, config: &AppConfig, jinja_env: &Environment) -> io:
                     style_url => format!("{}style.css", ASSETS_PREFIX),
                     title => file_path,
                     markdown_body => body,
-                    enable_syntax_highlight => config.enable_syntax_highlight,
                     enable_latex => config.enable_latex,
-                    enable_reload => config.enable_reload,
+                    enable_reload => cfg!(feature = "reload") && config.enable_reload,
                 })
                 .unwrap();
             html.into()
@@ -193,90 +201,13 @@ fn serve_file(url: &str, config: &AppConfig, jinja_env: &Environment) -> Respons
     }
 }
 
-/// Turns a Sec-WebSocket-Key into a Sec-WebSocket-Accept.
-fn convert_websocket_key(input: &str) -> String {
-    use base64::Engine as _;
-    use sha1::{Digest, Sha1};
-    const MAGIC_STRING: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-    let input = format!("{}{}", input, MAGIC_STRING);
-    let output = <Sha1 as Digest>::digest(input);
-    base64::engine::general_purpose::STANDARD.encode(output.as_slice())
-}
-
-fn accept_websocket(request: Request, watcher_bus: WatcherBus) {
-    if request
-        .headers()
-        .iter()
-        .find(|h| h.field.equiv("Upgrade"))
-        .and_then(|hdr| {
-            if hdr.value == "websocket" {
-                Some(hdr)
-            } else {
-                None
-            }
-        })
-        .is_none()
-    {
-        debug!("websocket accept failed: no 'Upgrade: websocket'");
-        let response = tiny_http::Response::from_data("Expected 'Upgrade: websocket' header")
-            .with_status_code(400);
-        let _ = request.respond(response);
-        return;
-    };
-
-    let key = match request
-        .headers()
-        .iter()
-        .find(|h| h.field.equiv("Sec-WebSocket-Key"))
-        .map(|h| h.value.clone())
-    {
-        None => {
-            debug!("websocket accept failed: no 'Sec-WebSocket-Key'");
-            let response = tiny_http::Response::from_data("Expected 'Sec-WebSocket-Key' header")
-                .with_status_code(400);
-            let _ = request.respond(response);
-            return;
-        }
-        Some(k) => k,
-    };
-
-    // building the "101 Switching Protocols" response
-    let response = Response::new_empty(tiny_http::StatusCode(101))
-        .with_header("Upgrade: websocket".parse::<tiny_http::Header>().unwrap())
-        .with_header("Connection: Upgrade".parse::<tiny_http::Header>().unwrap())
-        .with_header("Sec-WebSocket-Protocol: ping".parse::<Header>().unwrap())
-        .with_header(
-            format!(
-                "Sec-WebSocket-Accept: {}",
-                convert_websocket_key(key.as_str())
-            )
-            .parse::<Header>()
-            .unwrap(),
-        );
-
-    let mut stream = request.upgrade("websocket", response);
-    debug!("accepted websocket");
-    let mut watcher_rx = watcher_bus.write().unwrap().add_rx();
-    thread::spawn(move || loop {
-        let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f]; // TODO: uhhhhhhh
-        match watcher_rx.recv() {
-            Ok(event) => {
-                debug!("watcher_rx received: {:?} {:?}", event.kind, &event.paths);
-                stream.write_all(hello_frame).unwrap();
-                stream.flush().unwrap();
-                return;
-            }
-            Err(err) => {
-                error!("failed to recv event from bus: {}", err);
-                return;
-            }
-        }
-    });
-}
-
 /// Route a request and respond to it.
-fn handle(request: Request, config: &AppConfig, jinja_env: &Environment, watcher_bus: WatcherBus) {
+fn handle(
+    request: Request,
+    config: &AppConfig,
+    jinja_env: &Environment,
+    #[cfg(feature = "reload")] watcher_bus: watch::WatcherBus,
+) {
     if request.method() != &Method::Get {
         let response = error_response(StatusCode(405), jinja_env);
         let _ = request.respond(response);
@@ -284,20 +215,23 @@ fn handle(request: Request, config: &AppConfig, jinja_env: &Environment, watcher
     }
     let url = request.url().to_owned();
 
+    #[cfg(feature = "reload")]
     if let Some(_path) = url.strip_prefix(RELOAD_PREFIX) {
-        accept_websocket(request, watcher_bus);
+        websocket::accept_websocket(request, watcher_bus);
         return;
     }
+
     let response = if let Some(path) = url.strip_prefix(ASSETS_PREFIX) {
         handle_asset(path, jinja_env)
     } else {
         serve_file(&url, config, jinja_env)
     };
     if let Err(err) = request.respond(response) {
-        error!("cannot respond: {}", err);
+        log::error!("cannot respond: {}", err);
     };
 }
 
+#[cfg(feature = "open")]
 fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
     match browser {
         Some(ref browser) => open::with(url, browser),
@@ -305,20 +239,11 @@ fn open_browser(browser: &Option<String>, url: &str) -> io::Result<()> {
     }
 }
 
-type WatcherBus = Arc<RwLock<bus::Bus<notify::Event>>>;
-
-struct AppConfig {
-    addr: SocketAddr,
-    enable_reload: bool,
-    enable_latex: bool,
-    enable_syntax_highlight: bool,
-}
-
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = cli::CommandArgs::parse();
-    let config = AppConfig {
+    let config = app_config::AppConfig {
         addr: SocketAddr::new(args.host, args.port),
         enable_reload: args.enable_reload,
         enable_latex: args.enable_latex,
@@ -328,49 +253,24 @@ fn main() {
     let server = match Server::http(config.addr) {
         Ok(s) => s,
         Err(e) => {
-            error!("cannot start server: {}", e);
+            log::error!("cannot start server: {}", e);
             return;
         }
     };
 
-    info!("serving at http://{}", config.addr);
+    log::info!("serving at http://{}", config.addr);
 
-    let watcher_bus = Arc::new(RwLock::new(bus::Bus::new(8)));
+    #[cfg(feature = "reload")]
+    let watcher_bus = watch::setup_watcher(&config);
 
-    let watcher_bus_notify = watcher_bus.clone();
-    let mut watcher = notify::RecommendedWatcher::new(
-        move |event: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = event {
-                use notify::EventKind as Kind;
-                match event.kind {
-                    Kind::Remove(_) | Kind::Create(_) | Kind::Modify(_) => {
-                        debug!("watcher broadcast: {:?} {:?}", event.kind, &event.paths);
-                        let mut watcher_bus = watcher_bus_notify.write().unwrap();
-                        watcher_bus.broadcast(event);
-                    }
-                    Kind::Access(_) | Kind::Other | Kind::Any => {}
-                }
-            }
-        },
-        notify::Config::default(),
-    )
-    .unwrap();
-
-    if config.enable_reload {
-        watcher
-            .watch(".".as_ref(), notify::RecursiveMode::Recursive)
-            .unwrap();
-        debug!("watching directory: .");
-        // NOTE: https://github.com/notify-rs/notify/issues/247
-    }
-
+    #[cfg(feature = "open")]
     if !args.files.is_empty() {
         thread::spawn(move || {
             for file in args.files.into_iter() {
                 let url = format!("http://{}/{}", &config.addr, &file);
-                info!("opening {}", &url);
+                log::info!("opening {}", &url);
                 if let Err(e) = open_browser(&args.browser, &url) {
-                    error!("cannot open browser: {}", e);
+                    log::error!("cannot open browser: {}", e);
                 }
             }
         });
@@ -393,7 +293,14 @@ fn main() {
         .unwrap();
 
     for request in server.incoming_requests() {
-        debug!("{} {}", request.method(), request.url());
-        handle(request, &config, &jinja_env, watcher_bus.clone());
+        log::debug!("{} {}", request.method(), request.url());
+
+        handle(
+            request,
+            &config,
+            &jinja_env,
+            #[cfg(feature = "reload")]
+            watcher_bus.clone(),
+        );
     }
 }

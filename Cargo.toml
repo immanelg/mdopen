@@ -13,19 +13,28 @@ env_logger = { version = "0.11.3", default-features = false, features = [
 ] }
 lexopt = "0.3.0"
 log = "0.4.21"
-open = "5"
+open = { version = "5", optional = true }
 percent-encoding = "2"
-pulldown-cmark = { version = "0.12.1", default-features = false, features = [
+pulldown-cmark = { version = "0.13", default-features = false, features = [
     "html",
 ] }
 tiny_http = "0.12.0"
-sha1 = "0.10.6"
-base64 = "0.22.1"
-notify = "8.0.0"
-bus = "2.4.1"
+
+sha1 =  { version = "0.10.6", optional = true }
+base64 = { version = "0.22.1", optional = true }
+notify = { version = "8.0.0", optional = true }
+bus = { version = "2.4.1", optional = true }
+
 minijinja = "2.7.0"
 serde = { version = "1", features = ["derive"] }
-syntect = "5.2.0"
+syntect = { version = "5", optional = true }
+
+[features]
+default = ["open", "reload", "syntax"]
+open = ["dep:open"]
+reload = ["dep:notify", "dep:bus", "dep:base64", "dep:sha1"]
+syntax = ["dep:syntect"]
+
 
 [profile.release]
 strip = true
