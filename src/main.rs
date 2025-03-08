@@ -134,7 +134,7 @@ fn get_contents(path: &Path, config: &AppConfig, jinja_env: &Environment) -> io:
     let data = match ext {
         "md" | "markdown" => {
             let data = String::from_utf8_lossy(&data).to_string();
-            let body = markdown::to_html(&data);
+            let body = markdown::to_html(&data, config);
 
             let tpl = jinja_env.get_template("page.html").unwrap();
             let html = tpl
