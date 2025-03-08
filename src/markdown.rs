@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
 use syntect::html::{
-    append_highlighted_html_for_styled_line, start_highlighted_html_snippet, IncludeBackground,
+    append_highlighted_html_for_styled_line, start_highlighted_html_snippet, ClassStyle, ClassedHTMLGenerator, IncludeBackground
 };
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
@@ -27,7 +27,7 @@ pub struct SyntaxHighligher {
 }
 
 impl SyntaxHighligher {
-    pub fn new() -> Self {
+    pub fn load() -> Self {
         Self {
             syntax_set: SyntaxSet::load_defaults_newlines(),
             theme_set: ThemeSet::load_defaults(),
@@ -35,35 +35,49 @@ impl SyntaxHighligher {
     }
 
     pub fn highlight(&self, code: &str, lang: Option<&str>) -> String {
-        let theme = &self.theme_set.themes["base16-ocean.dark"];
+        //let theme = &self.theme_set.themes["base16-ocean.dark"];
 
         let syntax = lang
             .and_then(|l| self.syntax_set.find_syntax_by_token(l))
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
-        let mut highlighter = HighlightLines::new(syntax, theme);
-        let (mut output, bg) = start_highlighted_html_snippet(theme);
-        output.push_str("<code>");
+        //let mut highlighter = HighlightLines::new(syntax, theme);
+        //let (mut output, bg) = start_highlighted_html_snippet(theme);
 
+        // do we need `class="language-rust"`?
         //if lang.is_empty() {
         //    output.push_str("<pre><code>")
         //} else {
         //    output.push_str("<pre><code class=\"language-");
-        //    pulldown_cmark::escape_html(&mut self.writer, lang)?;
+        //    escape_html(&mut w, lang)?;
         //    output.push_str("\">")
         //}
         //
+
+        let mut output = String::with_capacity(64);
+        output.push_str("<pre><code>");
+
+        let mut html_generator = ClassedHTMLGenerator::new_with_class_style(
+            syntax, &self.syntax_set, ClassStyle::Spaced);
+
         for line in LinesWithEndings::from(code) {
-            let regions = highlighter.highlight_line(line, &self.syntax_set).unwrap();
-            append_highlighted_html_for_styled_line(
-                &regions[..],
-                IncludeBackground::IfDifferent(bg),
-                &mut output,
-            )
-            .unwrap();
+            html_generator.parse_html_for_line_which_includes_newline(line).unwrap();
+            //let regions = highlighter.highlight_line(line, &self.syntax_set).unwrap();
+            //append_highlighted_html_for_styled_line(
+            //    &regions[..],
+            //    IncludeBackground::IfDifferent(bg),
+            //    &mut output,
+            //)
+            //.unwrap();
         }
-        output.push_str("</code></pre>\n");
+        let inner = html_generator.finalize();
+        print!("{}", inner);
+        output.push_str(&inner);
+        output.push_str("</code></pre>");
         output
+
+        //output.push_str("</code></pre>\n");
+        //output
     }
 }
 
@@ -134,7 +148,7 @@ fn map_highlighted_codeblocks<'a>(
     parser: impl Iterator<Item = Event<'a>>,
 ) -> impl Iterator<Item = Event<'a>> {
     static SYNTAX: OnceLock<SyntaxHighligher> = OnceLock::new();
-    let syntax = SYNTAX.get_or_init(SyntaxHighligher::new);
+    let syntax = SYNTAX.get_or_init(SyntaxHighligher::load);
 
     let mut in_code_block = false;
     let mut lang = None;
