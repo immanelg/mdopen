@@ -4,7 +4,7 @@ use std::iter::Iterator;
 use std::sync::OnceLock;
 
 use syntect::easy::HighlightLines;
-use syntect::highlighting::ThemeSet;
+use syntect::highlighting::{Theme, ThemeSet};
 use syntect::html::{
     append_highlighted_html_for_styled_line, start_highlighted_html_snippet, ClassStyle, ClassedHTMLGenerator, IncludeBackground
 };
@@ -28,9 +28,17 @@ pub struct SyntaxHighligher {
 
 impl SyntaxHighligher {
     pub fn load() -> Self {
+        let mut theme_set = ThemeSet::new(); // empty
+
+        let github_dark = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Dark.tmTheme"))).unwrap();
+        let github_light = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Light.tmTheme"))).unwrap();
+
+        theme_set.themes.insert("github-dark".to_string(), github_dark);
+        theme_set.themes.insert("github-light".to_string(), github_light);
+
         Self {
             syntax_set: SyntaxSet::load_defaults_newlines(),
-            theme_set: ThemeSet::load_defaults(),
+            theme_set,
         }
     }
 
@@ -54,7 +62,7 @@ impl SyntaxHighligher {
         //output.push_str("</code></pre>");
         //output
 
-        let theme = &self.theme_set.themes["base16-ocean.dark"];
+        let theme = &self.theme_set.themes["github-dark"];
 
         let syntax = lang
             .and_then(|l| self.syntax_set.find_syntax_by_token(l))
