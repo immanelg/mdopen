@@ -79,69 +79,6 @@ impl SyntaxHighligher {
     }
 }
 
-//pub(crate) struct DecoratedParser<'a> {
-//    parser: pulldown_cmark::Parser<'a>,
-//    syntax: SyntaxHighligher,
-//    lang: Option<String>,
-//    code: Option<Vec<pulldown_cmark::CowStr<'a>>>,
-//    theme: &'a str,
-//
-//}
-//
-//impl<'a> DecoratedParser<'a> {
-//    pub(crate) fn new(
-//        parser: pulldown_cmark::Parser<'a>,
-//        syntax: SyntaxHighligher,
-//        theme: &'a str,
-//    ) -> Self {
-//        DecoratedParser {
-//            parser,
-//            syntax,
-//            theme,
-//            lang: None,
-//            code: None,
-//        }
-//    }
-//}
-//
-//impl<'a> Iterator for DecoratedParser<'a> {
-//    type Item = Event<'a>;
-//
-//    fn next(&mut self) -> Option<Event<'a>> {
-//        match self.parser.next() {
-//            Some(Event::Text(text)) => {
-//                if let Some(ref mut code) = self.code {
-//                    code.push(text);
-//                    Some(Event::Text(pulldown_cmark::CowStr::Borrowed("")))
-//                } else {
-//                    Some(Event::Text(text))
-//                }
-//            }
-//            Some(Event::Start(Tag::CodeBlock(info))) => {
-//                let tag = match info {
-//                    pulldown_cmark::CodeBlockKind::Indented => "",
-//                    pulldown_cmark::CodeBlockKind::Fenced(ref tag) => tag.as_ref(),
-//                };
-//                self.lang = tag.split(' ').map(|s| s.to_owned()).next();
-//                self.code = Some(vec![]);
-//                Some(Event::Text(pulldown_cmark::CowStr::Borrowed("")))
-//            }
-//            Some(Event::End(TagEnd::CodeBlock)) => {
-//                let html = if let Some(code) = self.code.as_deref() {
-//                    let code = code.iter().join("\n"); // itertools?
-//                    self.syntax.format(&code, self.lang.as_deref(), self.theme)
-//                } else {
-//                    self.syntax.format("", self.lang.as_deref(), self.theme)
-//                };
-//                self.lang = None;
-//                self.code = None;
-//                Some(Event::Html(pulldown_cmark::CowStr::Boxed(html.into_boxed_str())))
-//            }
-//            item => item,
-//        }
-//    }
-//}
-
 fn map_highlighted_codeblocks<'a>(
     parser: impl Iterator<Item = Event<'a>>,
 ) -> impl Iterator<Item = Event<'a>> {
