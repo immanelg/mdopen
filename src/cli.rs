@@ -53,7 +53,11 @@ fn parse_args() -> Result<CommandArgs, lexopt::Error> {
                 args.port = parser.value()?.parse()?;
             }
             Short('b') | Long("browser") => {
-                args.browser = Some(parser.value()?.parse()?);
+                if cfg!(not(feature = "open")) {
+                    log::warn!("mdopen is built without open feature");
+                } else {
+                    args.browser = Some(parser.value()?.parse()?);
+                }
             }
             Long("latex") => {
                 args.enable_latex = true;
@@ -62,19 +66,31 @@ fn parse_args() -> Result<CommandArgs, lexopt::Error> {
                 args.enable_latex = false;
             }
             Long("reload") => {
-                args.enable_reload = true;
+                if cfg!(not(feature = "reload")) {
+                    log::warn!("mdopen is built without reload feature");
+                } else {
+                    args.enable_reload = true;
+                }
             }
             Long("no-reload") => {
                 args.enable_reload = false;
             }
             Long("syntax-hl") => {
-                args.enable_syntax_highlight = true;
+                if cfg!(not(feature = "syntax")) {
+                    log::warn!("mdopen is built without syntax feature");
+                } else {
+                    args.enable_syntax_highlight = true;
+                }
             }
             Long("no-syntax-hl") => {
                 args.enable_syntax_highlight = false;
             }
             Value(val) => {
-                args.files.push(val.parse()?);
+                if cfg!(not(feature = "syntax")) {
+                    log::warn!("mdopen is built without open feature");
+                } else {
+                    args.files.push(val.parse()?);
+                }
             }
             Short('v') | Long("version") => {
                 eprintln!("{}", VERSION);
