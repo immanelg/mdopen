@@ -1,5 +1,7 @@
 use pulldown_cmark::TextMergeStream;
-use pulldown_cmark::{html::push_html, CodeBlockKind, Event, Tag, TagEnd};
+use pulldown_cmark::{html::push_html, CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use std::iter::Iterator;
+use std::sync::OnceLock;
 
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
@@ -8,6 +10,8 @@ use syntect::html::{
 };
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
+
+use crate::AppConfig;
 
 fn to_tag_anchor(name: &str) -> String {
     name.to_lowercase()
@@ -126,9 +130,38 @@ impl SyntaxHighligher {
 //    }
 //}
 
-pub fn to_html(md: &str) -> String {
-    use pulldown_cmark::{Options, Parser};
+fn map_highlighted_codeblocks<'a>(
+    parser: impl Iterator<Item = Event<'a>>,
+) -> impl Iterator<Item = Event<'a>> {
+    static SYNTAX: OnceLock<SyntaxHighligher> = OnceLock::new();
+    let syntax = SYNTAX.get_or_init(SyntaxHighligher::new);
 
+    let mut in_code_block = false;
+    let mut lang = None;
+
+    let parser = parser.map(move |event| match event {
+        Event::Start(Tag::CodeBlock(kind)) => {
+            in_code_block = true;
+            let tag = match kind {
+                CodeBlockKind::Indented => "",
+                CodeBlockKind::Fenced(ref tag) => tag.as_ref(),
+            };
+            lang = tag.split(' ').map(|s| s.to_owned()).next();
+            Event::Text(pulldown_cmark::CowStr::Borrowed(""))
+        }
+
+        Event::End(TagEnd::CodeBlock) => Event::Text(pulldown_cmark::CowStr::Borrowed("")),
+        Event::Text(code) if in_code_block => {
+            let html = syntax.highlight(code.as_ref(), lang.as_deref());
+            in_code_block = false;
+            lang = None;
+            Event::Html(pulldown_cmark::CowStr::Boxed(html.into_boxed_str()))
+        }
+        _ => event,
+    });
+    parser
+}
+pub fn to_html(md: &str, config: &AppConfig) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
@@ -165,30 +198,11 @@ pub fn to_html(md: &str) -> String {
         _ => event,
     });
 
-    let syntax = SyntaxHighligher::new();
-    let mut in_code_block = false;
-    let mut lang = None;
-
-    let parser = parser.map(|event| match event {
-        Event::Start(Tag::CodeBlock(kind)) => {
-            in_code_block = true;
-            let tag = match kind {
-                CodeBlockKind::Indented => "",
-                CodeBlockKind::Fenced(ref tag) => tag.as_ref(),
-            };
-            lang = tag.split(' ').map(|s| s.to_owned()).next();
-            Event::Text(pulldown_cmark::CowStr::Borrowed(""))
-        }
-
-        Event::End(TagEnd::CodeBlock) => Event::Text(pulldown_cmark::CowStr::Borrowed("")),
-        Event::Text(code) if in_code_block => {
-            let html = syntax.highlight(&code.as_ref(), lang.as_deref());
-            in_code_block = false;
-            lang = None;
-            Event::Html(pulldown_cmark::CowStr::Boxed(html.into_boxed_str()))
-        }
-        _ => event,
-    });
+    let parser: Box<dyn Iterator<Item = Event>> = if config.enable_syntax_highlight {
+        Box::new(map_highlighted_codeblocks::<'_>(parser))
+    } else {
+        Box::new(parser)
+    };
 
     let mut html_output = String::new();
     push_html(&mut html_output, parser);
