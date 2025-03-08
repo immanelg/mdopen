@@ -35,49 +35,47 @@ impl SyntaxHighligher {
     }
 
     pub fn highlight(&self, code: &str, lang: Option<&str>) -> String {
-        //let theme = &self.theme_set.themes["base16-ocean.dark"];
+        //let syntax = lang
+        //    .and_then(|l| self.syntax_set.find_syntax_by_token(l))
+        //    .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
+        //
+        //let mut output = String::with_capacity(64);
+        //output.push_str("<pre><code>");
+        //
+        //let mut html_generator = ClassedHTMLGenerator::new_with_class_style(
+        //    syntax, &self.syntax_set, ClassStyle::Spaced);
+        //
+        //for line in LinesWithEndings::from(code) {
+        //    html_generator.parse_html_for_line_which_includes_newline(line).unwrap();
+        //}
+        //let inner = html_generator.finalize();
+        //print!("{}", inner);
+        //output.push_str(&inner);
+        //output.push_str("</code></pre>");
+        //output
+
+        let theme = &self.theme_set.themes["base16-ocean.dark"];
 
         let syntax = lang
             .and_then(|l| self.syntax_set.find_syntax_by_token(l))
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
-        //let mut highlighter = HighlightLines::new(syntax, theme);
-        //let (mut output, bg) = start_highlighted_html_snippet(theme);
-
-        // do we need `class="language-rust"`?
-        //if lang.is_empty() {
-        //    output.push_str("<pre><code>")
-        //} else {
-        //    output.push_str("<pre><code class=\"language-");
-        //    escape_html(&mut w, lang)?;
-        //    output.push_str("\">")
-        //}
-        //
-
-        let mut output = String::with_capacity(64);
-        output.push_str("<pre><code>");
-
-        let mut html_generator = ClassedHTMLGenerator::new_with_class_style(
-            syntax, &self.syntax_set, ClassStyle::Spaced);
+        let mut highlighter = HighlightLines::new(syntax, theme);
+        let (mut output, bg) = start_highlighted_html_snippet(theme);
+        output.push_str("<code>");
 
         for line in LinesWithEndings::from(code) {
-            html_generator.parse_html_for_line_which_includes_newline(line).unwrap();
-            //let regions = highlighter.highlight_line(line, &self.syntax_set).unwrap();
-            //append_highlighted_html_for_styled_line(
-            //    &regions[..],
-            //    IncludeBackground::IfDifferent(bg),
-            //    &mut output,
-            //)
-            //.unwrap();
+            let regions = highlighter.highlight_line(line, &self.syntax_set).unwrap();
+            append_highlighted_html_for_styled_line(
+                &regions[..],
+                IncludeBackground::IfDifferent(bg),
+                &mut output,
+            )
+            .unwrap();
         }
-        let inner = html_generator.finalize();
-        print!("{}", inner);
-        output.push_str(&inner);
-        output.push_str("</code></pre>");
-        output
 
-        //output.push_str("</code></pre>\n");
-        //output
+        output.push_str("</code></pre>\n");
+        output
     }
 }
 
