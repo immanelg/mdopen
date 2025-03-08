@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Theme, ThemeSet};
 use syntect::html::{
-    append_highlighted_html_for_styled_line, start_highlighted_html_snippet, IncludeBackground
+    append_highlighted_html_for_styled_line, start_highlighted_html_snippet, IncludeBackground,
 };
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
@@ -30,11 +30,25 @@ impl SyntaxHighligher {
     pub fn load() -> Self {
         let mut theme_set = ThemeSet::new(); // empty
 
-        let github_dark: Theme = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Dark.tmTheme"))).unwrap();
-        let github_light: Theme = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Light.tmTheme"))).unwrap();
+        let github_dark: Theme = ThemeSet::load_from_reader(&mut std::io::Cursor::new(
+            include_bytes!("./vendor/GitHub_Dark.tmTheme"),
+        ))
+        .unwrap();
+        let github_light: Theme = ThemeSet::load_from_reader(&mut std::io::Cursor::new(
+            include_bytes!("./vendor/GitHub_Light.tmTheme"),
+        ))
+        .unwrap();
 
-        theme_set.themes.insert("github-dark".to_string(), github_dark);
-        theme_set.themes.insert("github-light".to_string(), github_light);
+        theme_set
+            .themes
+            .insert("github-dark".to_string(), github_dark);
+        theme_set
+            .themes
+            .insert("github-light".to_string(), github_light);
+
+        //for theme in theme_set.themes.iter_mut() {
+        //    theme.1.settings.background = None;
+        //}
 
         Self {
             syntax_set: SyntaxSet::load_defaults_newlines(),
@@ -62,6 +76,10 @@ impl SyntaxHighligher {
         //output.push_str("</code></pre>");
         //output
 
+        // TODO: we want to use classed html and generate CSS from the theme so everything below is
+        // supposed to be removed.
+        // See: https://docs.rs/syntect/latest/syntect/html/fn.css_for_theme_with_class_style.html
+
         let theme = &self.theme_set.themes["github-dark"];
 
         let syntax = lang
@@ -69,7 +87,9 @@ impl SyntaxHighligher {
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
 
         let mut highlighter = HighlightLines::new(syntax, theme);
+
         let (mut output, bg) = start_highlighted_html_snippet(theme);
+
         output.push_str("<code>");
 
         for line in LinesWithEndings::from(code) {
@@ -87,12 +107,16 @@ impl SyntaxHighligher {
     }
 }
 
+fn syntax() -> &'static SyntaxHighligher {
+    static SYNTAX: OnceLock<SyntaxHighligher> = OnceLock::new();
+    let syntax = SYNTAX.get_or_init(SyntaxHighligher::load);
+    syntax
+}
+
 fn map_highlighted_codeblocks<'a>(
     parser: impl Iterator<Item = Event<'a>>,
 ) -> impl Iterator<Item = Event<'a>> {
-    static SYNTAX: OnceLock<SyntaxHighligher> = OnceLock::new();
-    let syntax = SYNTAX.get_or_init(SyntaxHighligher::load);
-
+    let syntax = syntax();
     let mut in_code_block = false;
     let mut lang = None;
 
