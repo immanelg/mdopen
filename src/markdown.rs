@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Theme, ThemeSet};
 use syntect::html::{
-    append_highlighted_html_for_styled_line, start_highlighted_html_snippet, ClassStyle, ClassedHTMLGenerator, IncludeBackground
+    append_highlighted_html_for_styled_line, start_highlighted_html_snippet, IncludeBackground
 };
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
@@ -30,8 +30,8 @@ impl SyntaxHighligher {
     pub fn load() -> Self {
         let mut theme_set = ThemeSet::new(); // empty
 
-        let github_dark = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Dark.tmTheme"))).unwrap();
-        let github_light = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Light.tmTheme"))).unwrap();
+        let github_dark: Theme = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Dark.tmTheme"))).unwrap();
+        let github_light: Theme = ThemeSet::load_from_reader(&mut std::io::Cursor::new(include_bytes!("./vendor/GitHub_Light.tmTheme"))).unwrap();
 
         theme_set.themes.insert("github-dark".to_string(), github_dark);
         theme_set.themes.insert("github-light".to_string(), github_light);
