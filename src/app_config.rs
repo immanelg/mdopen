@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::net::SocketAddr;
 
 pub(crate) struct AppConfig {

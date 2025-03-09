@@ -6,7 +6,6 @@ use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::thread;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 mod app_config;
@@ -277,7 +276,7 @@ fn main() {
 
     #[cfg(feature = "open")]
     if !args.files.is_empty() {
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             for file in args.files.into_iter() {
                 let url = format!("http://{}/{}", &config.addr, &file);
                 log::info!("opening {}", &url);

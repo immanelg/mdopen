@@ -12,7 +12,7 @@ fn to_tag_anchor(name: &str) -> String {
         .collect()
 }
 
-pub fn to_html(md: &str, config: &AppConfig) -> String {
+pub fn to_html(md: &str, #[allow(unused)] config: &AppConfig) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
