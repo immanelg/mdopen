@@ -206,7 +206,7 @@ fn handle(
     request: Request,
     config: &AppConfig,
     jinja_env: &Environment,
-    #[cfg(feature = "reload")] watcher_bus: watch::WatcherBus,
+    #[cfg(feature = "reload")] watcher_bus: Option<watch::WatcherBus>,
 ) {
     if request.method() != &Method::Get {
         let response = error_response(StatusCode(405), jinja_env);
@@ -216,8 +216,15 @@ fn handle(
     let url = request.url().to_owned();
 
     #[cfg(feature = "reload")]
-    if let Some(_path) = url.strip_prefix(RELOAD_PREFIX) {
-        websocket::accept_websocket(request, watcher_bus);
+    if let Some(path) = url.strip_prefix(RELOAD_PREFIX) {
+        if let Some(watcher_bus) = watcher_bus {
+            websocket::accept_websocket(request, watcher_bus);
+        } else {
+            log::warn!(
+                "file watcher is disabled but websocket tried to connect to {}",
+                path
+            );
+        }
         return;
     }
 
@@ -261,7 +268,12 @@ fn main() {
     log::info!("serving at http://{}", config.addr);
 
     #[cfg(feature = "reload")]
-    let watcher_bus = watch::setup_watcher(&config);
+    let (watcher_bus, _watcher) = if config.enable_reload {
+        let (b, w) = watch::setup_watcher(&config);
+        (Some(b), Some(w))
+    } else {
+        (None, None)
+    };
 
     #[cfg(feature = "open")]
     if !args.files.is_empty() {
@@ -300,7 +312,7 @@ fn main() {
             &config,
             &jinja_env,
             #[cfg(feature = "reload")]
-            watcher_bus.clone(),
+            watcher_bus.as_ref().map(|w| w.clone()),
         );
     }
 }
