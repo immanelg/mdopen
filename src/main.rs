@@ -3,6 +3,7 @@ use percent_encoding::percent_decode;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
+use std::thread;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -17,6 +18,9 @@ mod watch;
 
 #[cfg(feature = "reload")]
 mod websocket;
+
+#[cfg(feature = "reload")]
+mod sse;
 
 #[cfg(feature = "syntax")]
 mod syntax;
@@ -217,7 +221,8 @@ fn handle(
     #[cfg(feature = "reload")]
     if let Some(path) = url.strip_prefix(RELOAD_PREFIX) {
         if let Some(watcher_bus) = watcher_bus {
-            websocket::accept_websocket(request, watcher_bus);
+            thread::spawn(|| sse::sse_emit_watcher_events(request, watcher_bus));
+            //websocket::accept_websocket(request, watcher_bus);
         } else {
             log::warn!(
                 "file watcher is disabled but websocket tried to connect to {}",
@@ -276,7 +281,7 @@ fn main() {
 
     #[cfg(feature = "open")]
     if !args.files.is_empty() {
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             for file in args.files.into_iter() {
                 let url = format!("http://{}/{}", &config.addr, &file);
                 log::info!("opening {}", &url);
