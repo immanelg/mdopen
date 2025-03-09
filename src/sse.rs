@@ -32,6 +32,7 @@ pub(crate) fn sse_emit_watcher_events(request: Request, watcher_bus: watch::Watc
             }
             Err(err) => {
                 log::error!("failed to recv event from bus: {}", err);
+                break;
             }
         }
     }
