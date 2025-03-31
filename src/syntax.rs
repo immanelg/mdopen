@@ -10,12 +10,12 @@ use syntect::html::{
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
-pub struct SyntaxHighligher {
+pub struct SyntaxHighlighter {
     syntax_set: SyntaxSet,
     theme_set: ThemeSet,
 }
 
-impl SyntaxHighligher {
+impl SyntaxHighlighter {
     pub fn load() -> Self {
         let mut theme_set = ThemeSet::new(); // empty
 
@@ -96,9 +96,9 @@ impl SyntaxHighligher {
     }
 }
 
-fn syntax() -> &'static SyntaxHighligher {
-    static SYNTAX: OnceLock<SyntaxHighligher> = OnceLock::new();
-    let syntax = SYNTAX.get_or_init(SyntaxHighligher::load);
+fn syntax() -> &'static SyntaxHighlighter {
+    static SYNTAX: OnceLock<SyntaxHighlighter> = OnceLock::new();
+    let syntax = SYNTAX.get_or_init(SyntaxHighlighter::load);
     syntax
 }
 

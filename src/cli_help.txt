@@ -17,7 +17,7 @@ Options:
         Default: 5032
     --latex
     --no-latex
-        Controls if mdopen will inlude KaTeX in HTML.
+        Controls if mdopen will include KaTeX in HTML.
         Default: true
     --reload
     --no-reload
