@@ -73,17 +73,28 @@ pub(crate) fn accept_websocket(request: Request, watcher_bus: watch::WatcherBus)
     let mut stream = request.upgrade("websocket", response);
     log::debug!("accepted websocket");
     let mut watcher_rx = watcher_bus.write().unwrap().add_rx();
-    thread::spawn(move || {
-        let hello_frame = &[0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f]; // TODO: uhhhhhhh
-        match watcher_rx.recv() {
-            Ok(event) => {
-                log::debug!("watcher_rx received: {:?} {:?}", event.kind, &event.paths);
-                stream.write_all(hello_frame).unwrap();
-                stream.flush().unwrap();
-            }
-            Err(err) => {
-                log::error!("failed to recv event from bus: {}", err);
-            }
+    thread::spawn(move || match watcher_rx.recv() {
+        Ok(event) => {
+            log::debug!("subscriber received an event: {:?}", event);
+            let msg = match event {
+                watch::Event::Reload => "reload",
+                watch::Event::Shutdown => "shutdown",
+            };
+            let frame = encode_frame(msg);
+            stream.write_all(&frame).unwrap();
+            stream.flush().unwrap();
+            log::debug!("sent ws frame: {:?}", frame);
+        }
+        Err(err) => {
+            log::error!("failed to recv event from bus: {}", err);
         }
     });
+}
+
+fn encode_frame(msg: &str) -> Vec<u8> {
+    const FIRST_BYTE: u8 = 0x81;
+    assert!(msg.len() < 126, "only tiny frames supported for now");
+    let mut frame = vec![FIRST_BYTE, msg.len() as u8];
+    frame.extend(msg.as_bytes());
+    frame
 }

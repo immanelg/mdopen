@@ -6,6 +6,8 @@ use std::fs;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 mod app_config;
@@ -303,15 +305,49 @@ fn main() {
         .add_template("error.html", include_str!("template/error.html"))
         .unwrap();
 
-    for request in server.incoming_requests() {
-        log::debug!("{} {}", request.method(), request.url());
+    let should_shutdown = Arc::new(AtomicBool::new(false));
+    let signals = [signal_hook::consts::SIGINT];
+    for signal in signals {
+        signal_hook::flag::register(signal, Arc::clone(&should_shutdown)).unwrap();
+    }
 
-        handle(
-            request,
-            &config,
-            &jinja_env,
-            #[cfg(feature = "reload")]
-            watcher_bus.as_ref().map(|w| w.clone()),
-        );
+    let shutdown = |code: i32| {
+        log::info!("shutdown");
+        #[cfg(feature = "reload")]
+        if let Some(watcher_bus) = watcher_bus.clone() {
+            watcher_bus
+                .write()
+                .unwrap()
+                .broadcast(watch::Event::Shutdown);
+            log::info!("published shutdown signal");
+            let timeout_for_subs = std::time::Duration::from_secs(1);
+            std::thread::sleep(timeout_for_subs);
+        };
+        std::process::exit(code);
+    };
+
+    loop {
+        let recv_timeout = std::time::Duration::from_secs(1);
+        match server.recv_timeout(recv_timeout) {
+            Ok(request) => {
+                if should_shutdown.load(Ordering::Relaxed) {
+                    shutdown(0);
+                };
+                if let Some(request) = request {
+                    log::debug!("{} {}", request.method(), request.url());
+                    handle(
+                        request,
+                        &config,
+                        &jinja_env,
+                        #[cfg(feature = "reload")]
+                        watcher_bus.as_ref().map(|w| w.clone()),
+                    );
+                }
+            }
+            Err(e) => {
+                log::error!("recv error: {:?}", e);
+                shutdown(1);
+            }
+        }
     }
 }
