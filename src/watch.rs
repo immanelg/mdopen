@@ -4,7 +4,13 @@ use notify::RecommendedWatcher;
 use notify::Watcher;
 use std::sync::{Arc, RwLock};
 
-pub(crate) type WatcherBus = Arc<RwLock<bus::Bus<notify::Event>>>;
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Event {
+    Reload,
+    Shutdown,
+}
+
+pub(crate) type WatcherBus = Arc<RwLock<bus::Bus<Event>>>;
 
 pub(crate) fn setup_watcher(_config: &AppConfig) -> (WatcherBus, impl Watcher) {
     let watcher_bus = Arc::new(RwLock::new(bus::Bus::new(8)));
@@ -18,7 +24,7 @@ pub(crate) fn setup_watcher(_config: &AppConfig) -> (WatcherBus, impl Watcher) {
                     Kind::Remove(_) | Kind::Create(_) | Kind::Modify(_) => {
                         debug!("watcher broadcast: {:?} {:?}", event.kind, &event.paths);
                         let mut watcher_bus = watcher_bus_notify.write().unwrap();
-                        watcher_bus.broadcast(event);
+                        watcher_bus.broadcast(Event::Reload);
                     }
                     Kind::Access(_) | Kind::Other | Kind::Any => {}
                 }

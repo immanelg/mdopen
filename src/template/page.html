@@ -49,10 +49,13 @@
         console.assert(wsUrl);
         const socket = new WebSocket(wsUrl, "ping");
         console.log("WS: ", socket);
-        socket.onmessage = (e) => console.log(e);
         socket.addEventListener("message", (event) => {
             console.log("WS message: ", event.data);
-            window.location.reload();
+            if (event.data === "reload") {
+                window.location.reload();
+                return;
+            };
+            // TODO: handle other events
         });
         socket.addEventListener("error", (event) => {
             console.log("WS error: ", event);

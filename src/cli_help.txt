@@ -23,7 +23,7 @@ Options:
     --no-reload
         Controls if mdopen will watch filesystem changes in the directory 
         and live reload HTML page with WebSocket messages.
-        Default: false
+        Default: true
     --syntax-hl
     --no-syntax-hl
         Controls if mdopen will include syntax highlighting script for

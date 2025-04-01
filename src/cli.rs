@@ -38,7 +38,7 @@ fn parse_args() -> Result<CommandArgs, lexopt::Error> {
         browser: None,
         files: Vec::new(),
         enable_latex: true,
-        enable_reload: false,
+        enable_reload: true,
         enable_syntax_highlight: true,
     };
 
