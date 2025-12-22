@@ -37,7 +37,11 @@
         import katex from 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.mjs';
         const nodes = Array.from(document.body.querySelectorAll('.math'))
         for (const node of nodes) {
-            katex.render(node.textContent, node, {throwOnError: false})
+            const isDisplay = node.classList.contains('math-display');
+            katex.render(node.textContent, node, {
+                throwOnError: false,
+                displayMode: isDisplay
+            });
         }
     </script>
     {% endif %}
