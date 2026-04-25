@@ -153,6 +153,7 @@ fn get_contents(path: &Path, config: &AppConfig, jinja_env: &Environment) -> io:
                     markdown_body => body,
                     enable_latex => config.enable_latex,
                     enable_reload => cfg!(feature = "reload") && config.enable_reload,
+                    theme => config.theme.as_str(),
                 })
                 .unwrap();
             html.into()
@@ -254,6 +255,7 @@ fn main() {
         enable_reload: args.enable_reload,
         enable_latex: args.enable_latex,
         enable_syntax_highlight: args.enable_syntax_highlight,
+        theme: args.theme,
     };
 
     let server = match Server::http(config.addr) {

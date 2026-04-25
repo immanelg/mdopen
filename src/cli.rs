@@ -8,6 +8,23 @@ use lexopt::{
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const USAGE: &str = include_str!("cli_help.txt");
 
+#[derive(Debug, Clone, Copy)]
+pub enum Theme {
+    Auto,
+    Light,
+    Dark,
+}
+
+impl Theme {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Theme::Auto => "auto",
+            Theme::Light => "light",
+            Theme::Dark => "dark",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CommandArgs {
     pub files: Vec<String>,
@@ -17,6 +34,7 @@ pub struct CommandArgs {
     pub enable_reload: bool,
     pub enable_latex: bool,
     pub enable_syntax_highlight: bool,
+    pub theme: Theme,
 }
 
 impl CommandArgs {
@@ -40,6 +58,7 @@ fn parse_args() -> Result<CommandArgs, lexopt::Error> {
         enable_latex: true,
         enable_reload: false,
         enable_syntax_highlight: true,
+        theme: Theme::Auto,
     };
 
     let mut parser = lexopt::Parser::from_env();
@@ -84,6 +103,20 @@ fn parse_args() -> Result<CommandArgs, lexopt::Error> {
             }
             Long("no-syntax-hl") => {
                 args.enable_syntax_highlight = false;
+            }
+            Long("theme") => {
+                let val: String = parser.value()?.parse()?;
+                args.theme = match val.as_str() {
+                    "auto" => Theme::Auto,
+                    "light" => Theme::Light,
+                    "dark" => Theme::Dark,
+                    other => {
+                        return Err(lexopt::Error::ParsingFailed {
+                            value: other.into(),
+                            error: "expected one of: auto, light, dark".into(),
+                        })
+                    }
+                };
             }
             Value(val) => {
                 if cfg!(not(feature = "syntax")) {

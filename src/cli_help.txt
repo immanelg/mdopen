@@ -29,3 +29,7 @@ Options:
         Controls if mdopen will include syntax highlighting script for
         code blocks in HTML.
         Default: true
+    --theme=VALUE
+        Color theme for the rendered preview.
+        VALUE: auto | light | dark
+        Default: auto (follows the browser's prefers-color-scheme)

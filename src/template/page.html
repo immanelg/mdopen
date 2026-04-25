@@ -5,11 +5,17 @@
 {{ super() }}
 <link rel="stylesheet" href="{{style_url}}">
 <style>
+{% if theme == "dark" %}
+body { background-color: #0d1117; }
+{% elif theme == "light" %}
+body { background-color: #ffffff; }
+{% else %}
 @media (prefers-color-scheme: dark) {
     body {
         background-color: #0d1117;
     }
 }
+{% endif %}
 .markdown-body {
     box-sizing: border-box;
     min-width: 200px;
@@ -21,7 +27,7 @@
 {% endblock %}
 
 {% block body %}
-<div class="markdown-body">
+<div class="markdown-body"{% if theme != "auto" %} data-theme="{{theme}}"{% endif %}>
     {# <p><a href='#' onclick='history.back();'>Go back</a></p> #}
     {# <p><a href='/'>Home</a></p> #}
     {{markdown_body|safe}}
