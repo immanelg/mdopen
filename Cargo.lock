@@ -854,7 +854,7 @@ checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
 name = "mdopen"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64",
  "bus",
