@@ -24,6 +24,10 @@ mod syntax;
 use app_config::AppConfig;
 
 pub static STYLE_CSS: &[u8] = include_bytes!("vendor/github.css");
+pub static PRINT_CSS: &[u8] = include_bytes!("vendor/github-print.css");
+pub static MERMAID_CSS: &[u8] = include_bytes!("vendor/github-mermaid.css");
+pub static MERMAID_JS: &[u8] = include_bytes!("vendor/mermaid.min.js");
+pub static MERMAID_INIT_JS: &[u8] = include_bytes!("vendor/mermaid-init.js");
 
 pub static ASSETS_PREFIX: &str = "/__mdopen_assets/";
 pub static RELOAD_PREFIX: &str = "/__mdopen_reload/";
@@ -67,6 +71,10 @@ fn mime_type(ext: &str) -> Option<&'static str> {
 fn handle_asset(path: &str, jinja_env: &Environment) -> Response<Cursor<Vec<u8>>> {
     let data = match path {
         "style.css" => STYLE_CSS,
+        "print.css" => PRINT_CSS,
+        "mermaid.css" => MERMAID_CSS,
+        "mermaid.min.js" => MERMAID_JS,
+        "mermaid-init.js" => MERMAID_INIT_JS,
         _ => {
             log::info!("asset not found: {}", &path);
             return error_response(StatusCode(404), jinja_env);
@@ -149,6 +157,10 @@ fn get_contents(path: &Path, config: &AppConfig, jinja_env: &Environment) -> io:
                 .render(context! {
                     websocket_url => format!("ws://{}{}", config.addr, RELOAD_PREFIX), // FIXME: add file path
                     style_url => format!("{}style.css", ASSETS_PREFIX),
+                    print_url => format!("{}print.css", ASSETS_PREFIX),
+                    mermaid_style_url => format!("{}mermaid.css", ASSETS_PREFIX),
+                    mermaid_js_url => format!("{}mermaid.min.js", ASSETS_PREFIX),
+                    mermaid_init_url => format!("{}mermaid-init.js", ASSETS_PREFIX),
                     title => file_path,
                     markdown_body => body,
                     enable_latex => config.enable_latex,
