@@ -4,6 +4,8 @@
 {% block head %}
 {{ super() }}
 <link rel="stylesheet" href="{{style_url}}">
+<link rel="stylesheet" href="{{print_url}}" media="print">
+<link rel="stylesheet" href="{{mermaid_style_url}}">
 <style>
 {% if theme == "dark" %}
 body { background-color: #0d1117; }
@@ -24,6 +26,8 @@ body { background-color: #ffffff; }
     padding: 45px;
 }
 </style>
+<script src="{{mermaid_js_url}}"></script>
+<script src="{{mermaid_init_url}}"></script>
 {% endblock %}
 
 {% block body %}
